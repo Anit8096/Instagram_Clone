@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Insta" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Shown until the stored session has been read (see MainActivity). -->
+    <style name="Theme.Insta.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Insta</item>
+    </style>
+</resources>

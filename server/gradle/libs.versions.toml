@@ -1,0 +1,60 @@
+[versions]
+kotlin = "2.4.20"
+ktor = "3.6.0"
+koin = "4.2.2"
+exposed = "1.5.0"
+flyway = "13.9.0"
+hikari = "7.1.0"
+postgres = "42.7.13"
+password4j = "1.8.4"
+logback = "1.6.5"
+thumbnailator = "0.4.21"
+twelvemonkeys = "3.15.2"
+testcontainers = "2.0.5"
+junit = "5.13.4"
+
+[libraries]
+ktor-bom = { module = "io.ktor:ktor-bom", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core" }
+ktor-server-netty = { module = "io.ktor:ktor-server-netty" }
+ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation" }
+ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json" }
+ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages" }
+ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging" }
+ktor-server-call-id = { module = "io.ktor:ktor-server-call-id" }
+ktor-server-auth = { module = "io.ktor:ktor-server-auth" }
+ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt" }
+ktor-server-rate-limit = { module = "io.ktor:ktor-server-rate-limit" }
+ktor-server-websockets = { module = "io.ktor:ktor-server-websockets" }
+ktor-server-swagger = { module = "io.ktor:ktor-server-swagger" }
+ktor-server-test-host = { module = "io.ktor:ktor-server-test-host" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation" }
+
+koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin" }
+koin-ktor = { module = "io.insert-koin:koin-ktor" }
+koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j" }
+
+exposed-bom = { module = "org.jetbrains.exposed:exposed-bom", version.ref = "exposed" }
+exposed-core = { module = "org.jetbrains.exposed:exposed-core" }
+exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc" }
+exposed-java-time = { module = "org.jetbrains.exposed:exposed-java-time" }
+
+flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
+flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
+hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgres" }
+password4j = { module = "com.password4j:password4j", version.ref = "password4j" }
+logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+thumbnailator = { module = "net.coobird:thumbnailator", version.ref = "thumbnailator" }
+twelvemonkeys-jpeg = { module = "com.twelvemonkeys.imageio:imageio-jpeg", version.ref = "twelvemonkeys" }
+twelvemonkeys-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
+
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

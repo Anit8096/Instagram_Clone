@@ -1,0 +1,28 @@
+<journey name="M2 sign-up, logout, login and session persistence">
+   <description>
+      End-to-end check of the M2 auth flow against the local Docker backend
+      (docker compose up). Uses a fresh username; change it if the account already exists.
+   </description>
+   <actions>
+     <action>Verify that the login screen is shown with a "Username or email" field, a "Password" field and a "Log in" button</action>
+     <action>Tap the "Log in" button</action>
+     <action>Verify that two "Required" error messages are shown</action>
+     <action>Tap "Sign up"</action>
+     <action>Verify that a "Create account" button is shown</action>
+     <action>Enter "journey.user" in the "Username" field</action>
+     <action>Enter "journey.user@example.com" in the "Email" field</action>
+     <action>Enter "journey-password" in the "Password" field</action>
+     <action>Tap the "Create account" button</action>
+     <action>Verify that the main app is shown with "Home", "Explore", "Create", "Activity" and "Profile" navigation items</action>
+     <action>Tap the "Profile" navigation item</action>
+     <action>Verify that "@journey.user" is shown</action>
+     <action>Tap the "Log out" button</action>
+     <action>Verify that the login screen is shown</action>
+     <action>Enter "journey.user" in the "Username or email" field</action>
+     <action>Enter "journey-password" in the "Password" field</action>
+     <action>Tap the "Log in" button</action>
+     <action>Verify that the main app is shown with the "Home" navigation item selected</action>
+     <action>Force-stop and relaunch the app</action>
+     <action>Verify that the main app is shown without asking to log in again</action>
+   </actions>
+</journey>

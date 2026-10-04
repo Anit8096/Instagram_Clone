@@ -1,0 +1,15 @@
+<journey name="M5 like and comment">
+   <description>
+      Signed in as journey.user, following journey.friend, whose post "Hello from a friend" has no likes or comments.
+      Backend reachable.
+   </description>
+   <actions>
+     <action>Verify that the feed shows the post "Hello from a friend" with "0 likes"</action>
+     <action>Tap the "Like" button on that post</action>
+     <action>Verify that the post shows "1 like" and an "Unlike" button</action>
+     <action>Tap "Add a comment"</action>
+     <action>Enter "Nice shot!" in the "Add a comment…" field</action>
+     <action>Tap the "Post comment" button</action>
+     <action>Verify that the comment "Nice shot!" is shown by journey.user without "Sending…"</action>
+   </actions>
+</journey>

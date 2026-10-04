@@ -1,0 +1,27 @@
+<journey name="M3 create post, view, delete and edit profile">
+   <description>
+      End-to-end check of M3 against the local Docker backend, signed in as an existing user.
+      Needs at least one photo in the device gallery.
+   </description>
+   <actions>
+     <action>Verify that the main app is shown with "Home", "Explore", "Create", "Activity" and "Profile" navigation items</action>
+     <action>Tap the "Create" navigation item</action>
+     <action>Verify that a "Choose photo" button is shown</action>
+     <action>Tap the "Choose photo" button</action>
+     <action>Tap the first photo in the photo picker</action>
+     <action>Tap "Done" in the photo picker</action>
+     <action>Verify that the selected photo preview and a "Write a caption…" field are shown</action>
+     <action>Enter "First journey post" in the "Write a caption…" field</action>
+     <action>Tap the "Share" button</action>
+     <action>Verify that the profile is shown with "1" post</action>
+     <action>Tap the first photo in the profile grid</action>
+     <action>Verify that the post screen shows the caption "First journey post"</action>
+     <action>Tap the "Delete post" button</action>
+     <action>Tap "Delete" in the confirmation dialog</action>
+     <action>Verify that the profile shows "No posts yet"</action>
+     <action>Tap the "Edit profile" button</action>
+     <action>Enter "Hello from the journey" in the "Bio" field</action>
+     <action>Tap the "Save" button</action>
+     <action>Verify that the profile shows the bio "Hello from the journey"</action>
+   </actions>
+</journey>

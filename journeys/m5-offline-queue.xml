@@ -1,0 +1,15 @@
+<journey name="M5 offline like and comment are queued, then delivered">
+   <description>
+      Continues from m5-engagement. Before step 1 the backend is stopped (docker compose stop server);
+      it is started again right after step 6 (docker compose start server).
+   </description>
+   <actions>
+     <action>Tap the "Back" button to return to the feed</action>
+     <action>Tap the "Unlike" button on the post "Hello from a friend"</action>
+     <action>Verify that the post shows "0 likes" and a "Like" button</action>
+     <action>Tap "View 1 comment"</action>
+     <action>Enter "Offline hello" in the "Add a comment…" field and tap the "Post comment" button</action>
+     <action>Verify that "Offline hello" is shown with "Sending…"</action>
+     <action>Wait up to 90 seconds, then verify that "Offline hello" is shown without "Sending…"</action>
+   </actions>
+</journey>

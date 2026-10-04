@@ -1,0 +1,11 @@
+<journey name="M4 feed stays readable when the server is unreachable">
+   <description>
+      Run right after m4-social (the feed has been loaded once), with the backend stopped
+      (docker compose stop server) so every request fails to connect.
+   </description>
+   <actions>
+     <action>Force-stop and relaunch the app</action>
+     <action>Verify that the feed shows the caption "Hello from a friend"</action>
+     <action>Verify that the message "You're offline. Showing saved posts." is shown</action>
+   </actions>
+</journey>

@@ -1,0 +1,344 @@
+openapi: 3.0.3
+info:
+  title: Insta API
+  version: 0.1.0
+  description: |
+    Backend for the Insta Android app. All endpoints live under `/api/v1`.
+    Errors always use the `ErrorEnvelope` shape. Authenticated endpoints need
+    `Authorization: Bearer <accessToken>`; refresh it with `POST /auth/refresh`.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Liveness + database check
+      responses:
+        '200': { description: Healthy }
+        '503': { description: Database unreachable }
+
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Create an account with username, email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Auth' }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Sign in with username or email + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Auth' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/google:
+    post:
+      tags: [auth]
+      summary: Sign in with a Google ID token (creates or links the account)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idToken]
+              properties:
+                idToken: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Auth' }
+        '401': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '501': { description: Google sign-in not configured on this server }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate a refresh token
+      description: |
+        Each refresh token is single-use. Presenting one that was already used revokes
+        every token from the same login (theft detection) and returns 401.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Auth' }
+        '401': { $ref: '#/components/responses/Error' }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the refresh token's session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '204': { description: Logged out (also returned for unknown tokens) }
+
+  /api/v1/me:
+    get:
+      tags: [users]
+      summary: The signed-in user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Error' }
+
+    patch:
+      tags: [users]
+      summary: Update display name, bio or avatar (omitted fields unchanged)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName: { type: string, maxLength: 60 }
+                bio: { type: string, maxLength: 150 }
+                avatarMediaId: { type: string, format: uuid, description: Media uploaded with kind=avatar }
+                removeAvatar: { type: boolean }
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/media:
+    post:
+      tags: [media]
+      summary: Upload an image (JPEG/PNG/WebP, max 10 MB)
+      description: Re-encoded to JPEG without metadata; display size fits 1080x1350, thumbnail is 320x320.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: kind, in: query, schema: { type: string, enum: [post, avatar], default: post } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored media
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Media' }
+        '413': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /api/v1/media/{id}/{variant}:
+    get:
+      tags: [media]
+      summary: Image bytes (public, immutable, ETag)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: variant, in: path, required: true, schema: { type: string, enum: [full, thumb] } }
+      responses:
+        '200': { description: JPEG image, content: { image/jpeg: {} } }
+        '304': { description: Not modified }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/posts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid }, description: Client-generated id }
+    put:
+      tags: [posts]
+      summary: Create a post (idempotent per client id)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mediaId]
+              properties:
+                mediaId: { type: string, format: uuid }
+                caption: { type: string, maxLength: 2200 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Post' } } } }
+        '200': { description: Already existed (retry), content: { application/json: { schema: { $ref: '#/components/schemas/Post' } } } }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+    get:
+      tags: [posts]
+      summary: A post
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Post, content: { application/json: { schema: { $ref: '#/components/schemas/Post' } } } }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [posts]
+      summary: Delete your own post (and its image)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/{username}:
+    get:
+      tags: [users]
+      summary: Public profile with counts
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: username, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/User' }
+                  postCount: { type: integer }
+                  followerCount: { type: integer }
+                  followingCount: { type: integer }
+                  isMe: { type: boolean }
+                  isFollowing: { type: boolean }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /api/v1/users/{username}/posts:
+    get:
+      tags: [users]
+      summary: A user's posts, newest first (cursor pagination)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: username, in: path, required: true, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 30, maximum: 60 } }
+      responses:
+        '200':
+          description: Page of posts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Post' } }
+                  nextCursor: { type: string, nullable: true }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    Auth:
+      description: Tokens + user
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AuthResponse' }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username: { type: string, pattern: '^[a-z0-9._]{3,30}$', example: jane.doe }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 128 }
+        displayName: { type: string, maxLength: 60 }
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login: { type: string, description: Username or email }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, description: Access token lifetime in seconds }
+        user: { $ref: '#/components/schemas/User' }
+        isNewUser: { type: boolean }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        displayName: { type: string }
+        bio: { type: string }
+        avatarUrl: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    Media:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        thumbUrl: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+    Post:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        author:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            username: { type: string }
+            displayName: { type: string }
+            avatarUrl: { type: string, nullable: true }
+        imageUrl: { type: string }
+        thumbUrl: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        caption: { type: string }
+        likeCount: { type: integer }
+        commentCount: { type: integer }
+        likedByMe: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: { type: string }

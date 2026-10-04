@@ -1,0 +1,18 @@
+<journey name="M4 search, follow and see the post in the home feed">
+   <description>
+      Signed in as journey.user, who does not follow journey.friend. journey.friend has one post
+      with the caption "Hello from a friend". Backend reachable.
+   </description>
+   <actions>
+     <action>Verify that the main app is shown with the "Home" navigation item selected</action>
+     <action>Tap the "Explore" navigation item</action>
+     <action>Enter "journey.fr" in the "Search people" field</action>
+     <action>Verify that "journey.friend" is shown in the results</action>
+     <action>Tap "journey.friend"</action>
+     <action>Verify that the profile of journey.friend is shown with a "Follow" button</action>
+     <action>Tap the "Follow" button</action>
+     <action>Verify that a "Following" button is shown and the followers count is 1</action>
+     <action>Tap the "Home" navigation item</action>
+     <action>Verify that the feed shows a post by "journey.friend" with the caption "Hello from a friend"</action>
+   </actions>
+</journey>

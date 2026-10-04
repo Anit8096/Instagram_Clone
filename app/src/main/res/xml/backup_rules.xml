@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+   Backup rules for Android 11 and lower. See data_extraction_rules.xml for Android 12+.
+-->
+<full-backup-content>
+    <!-- Session tokens are encrypted with a Keystore key that is never backed up, so a restored
+         copy could not be decrypted anyway. Users sign in again on a new device. -->
+    <exclude domain="file" path="datastore/session.preferences_pb" />
+</full-backup-content>

@@ -1,0 +1,16 @@
+<journey name="M6 direct message in real time with seen receipt">
+   <description>
+      Signed in as journey.user, who follows journey.friend. Backend reachable. After step 6 the harness posts a reply
+      from journey.friend through the API; after step 7 it marks the conversation read as journey.friend.
+   </description>
+   <actions>
+     <action>Tap the "Messages" button in the top bar of the Home screen</action>
+     <action>Verify that the Messages screen is shown</action>
+     <action>Tap the "Back" button, tap the "Explore" navigation item, search "journey.fr" and tap "journey.friend"</action>
+     <action>Tap the "Message" button</action>
+     <action>Enter "Are you around?" in the "Message…" field and tap the "Send message" button</action>
+     <action>Verify that "Are you around?" is shown without "Sending…"</action>
+     <action>Verify within 10 seconds, without any tap, that the reply "Yes, right here!" appears</action>
+     <action>Verify within 10 seconds that "Seen" is shown under "Are you around?"</action>
+   </actions>
+</journey>

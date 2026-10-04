@@ -1,0 +1,131 @@
+<resources>
+    <string name="app_name">Insta</string>
+
+    <!-- Auth -->
+    <string name="login_subtitle">Sign in to see photos from people you follow.</string>
+    <string name="register_subtitle">Create an account to start sharing.</string>
+    <string name="login_no_account">Don\'t have an account?</string>
+    <string name="register_have_account">Already have an account?</string>
+    <string name="field_login">Username or email</string>
+    <string name="field_username">Username</string>
+    <string name="field_username_hint">Lowercase letters, numbers, \'.\' and \'_\'</string>
+    <string name="field_email">Email</string>
+    <string name="field_display_name">Name (optional)</string>
+    <string name="field_password">Password</string>
+    <string name="action_log_in">Log in</string>
+    <string name="action_sign_up">Sign up</string>
+    <string name="action_create_account">Create account</string>
+    <string name="action_continue_with_google">Continue with Google</string>
+    <string name="action_show">Show</string>
+    <string name="action_hide">Hide</string>
+    <string name="action_log_out">Log out</string>
+    <string name="action_retry">Retry</string>
+
+    <!-- Validation and errors -->
+    <string name="error_required">Required</string>
+    <string name="error_username_format">3–30 characters: lowercase letters, numbers, \'.\' or \'_\'</string>
+    <string name="error_email_format">Enter a valid email address</string>
+    <string name="error_password_length">Use 8 to 128 characters</string>
+    <string name="error_display_name_length">At most 60 characters</string>
+    <string name="error_username_taken">That username is taken</string>
+    <string name="error_email_taken">An account with this email already exists</string>
+    <string name="error_invalid_credentials">Incorrect username/email or password</string>
+    <string name="error_google_no_account">No Google account found on this device</string>
+    <string name="error_google_failed">Google sign-in didn\'t work. Try again or use your password.</string>
+    <string name="error_network">Can\'t reach the server. Check your connection and try again.</string>
+    <string name="error_rate_limited">Too many attempts. Wait a minute and try again.</string>
+    <string name="error_server">Something went wrong on our side. Try again shortly.</string>
+    <string name="error_generic">Something went wrong. Try again.</string>
+
+    <!-- Main tabs -->
+    <string name="tab_feed">Home</string>
+    <string name="tab_explore">Explore</string>
+    <string name="tab_create">Create</string>
+    <string name="tab_notifications">Activity</string>
+    <string name="tab_profile">Profile</string>
+    <string name="placeholder_create">Share a photo with your followers.</string>
+    <string name="placeholder_notifications">Likes, comments, follows and messages will appear here.</string>
+
+    <!-- Create post -->
+    <string name="create_title">New post</string>
+    <string name="action_choose_photo">Choose photo</string>
+    <string name="action_change_photo">Change photo</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_share">Share</string>
+    <string name="field_caption">Write a caption…</string>
+    <string name="cd_selected_photo">Selected photo</string>
+    <string name="error_caption_length">Captions can be at most 2,200 characters</string>
+    <string name="error_image_unreadable">Couldn\'t read that photo. Try another one.</string>
+    <string name="upload_in_progress">Posting…</string>
+    <plurals name="upload_in_progress_many">
+        <item quantity="one">Posting %1$d photo…</item>
+        <item quantity="other">Posting %1$d photos…</item>
+    </plurals>
+    <string name="upload_failed">Couldn\'t post your photo</string>
+    <string name="action_discard">Discard</string>
+
+    <!-- Post detail -->
+    <string name="post_title">Post</string>
+    <string name="post_not_found">This post is no longer available.</string>
+    <string name="cd_post_photo">Photo by %1$s</string>
+    <string name="action_back">Back</string>
+    <string name="action_delete_post">Delete post</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="delete_post_title">Delete post?</string>
+    <string name="delete_post_body">This removes the photo and caption for everyone. It can\'t be undone.</string>
+
+    <!-- Profile -->
+    <string name="stat_posts">Posts</string>
+    <string name="stat_followers">Followers</string>
+    <string name="stat_following">Following</string>
+    <string name="profile_no_posts">No posts yet</string>
+    <string name="action_share_first_photo">Share your first photo</string>
+    <string name="action_edit_profile">Edit profile</string>
+    <string name="edit_profile_title">Edit profile</string>
+    <string name="action_save">Save</string>
+    <string name="field_display_name_edit">Name</string>
+    <string name="field_bio">Bio</string>
+    <string name="error_bio_length">At most 150 characters</string>
+
+    <!-- Feed, explore, follows -->
+    <string name="feed_empty">Your feed is empty. Follow people to see their photos here.</string>
+    <string name="feed_offline">You\'re offline. Showing saved posts.</string>
+    <string name="action_find_people">Find people</string>
+    <string name="search_hint">Search people</string>
+    <string name="action_clear_search">Clear search</string>
+    <string name="search_no_results">No people found</string>
+    <string name="explore_empty">Nothing to explore yet</string>
+    <string name="action_follow">Follow</string>
+    <string name="action_following">Following</string>
+    <string name="follow_list_empty">No one here yet</string>
+
+    <!-- Likes and comments -->
+    <string name="action_like">Like</string>
+    <string name="action_unlike">Unlike</string>
+    <plurals name="like_count">
+        <item quantity="one">%1$d like</item>
+        <item quantity="other">%1$d likes</item>
+    </plurals>
+    <plurals name="view_comments">
+        <item quantity="one">View %1$d comment</item>
+        <item quantity="other">View all %1$d comments</item>
+    </plurals>
+    <string name="action_add_comment">Add a comment</string>
+    <string name="comments_title">Comments</string>
+    <string name="comments_empty">No comments yet. Start the conversation.</string>
+    <string name="comment_hint">Add a comment…</string>
+    <string name="action_post_comment">Post comment</string>
+    <string name="action_delete_comment">Delete comment</string>
+    <string name="action_load_more">Load more</string>
+    <string name="comment_sending">Sending…</string>
+    <string name="comment_failed">Couldn\'t send</string>
+
+    <!-- Messages -->
+    <string name="messages_title">Messages</string>
+    <string name="messages_empty">No conversations yet. Message someone from their profile.</string>
+    <string name="message_hint">Message…</string>
+    <string name="action_send_message">Send message</string>
+    <string name="action_message">Message</string>
+    <string name="message_seen">Seen</string>
+</resources>

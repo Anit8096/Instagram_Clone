@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: insta
+      POSTGRES_USER: ${DATABASE_USER:-insta}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d insta"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: ./server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/insta
+      DATABASE_USER: ${DATABASE_USER:-insta}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      MEDIA_ROOT: /data/media
+    ports:
+      - "8080:8080"
+    volumes:
+      - media:/data/media
+
+volumes:
+  pgdata:
+  media:
