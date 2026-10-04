@@ -52,6 +52,15 @@ import com.android.insta.feature.profile.data.ProfileApi
 import com.android.insta.feature.profile.data.ProfileRepository
 import com.android.insta.feature.profile.ui.EditProfileViewModel
 import com.android.insta.feature.profile.ui.ProfileViewModel
+import com.android.insta.feature.notifications.data.ActivityBadge
+import com.android.insta.feature.notifications.data.NotificationsApi
+import com.android.insta.feature.notifications.data.NotificationsRepository
+import com.android.insta.feature.notifications.data.PushRegistrar
+import com.android.insta.feature.notifications.data.PushTokens
+import com.android.insta.feature.notifications.push.FirebasePushTokens
+import com.android.insta.feature.notifications.push.SystemNotifier
+import com.android.insta.feature.notifications.ui.ActivityViewModel
+import com.android.insta.navigation.PendingDeepLinks
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -122,6 +131,8 @@ val authModule = module {
     single<GoogleSignInClient> { CredentialManagerGoogleSignInClient(androidContext(), BuildConfig.GOOGLE_SERVER_CLIENT_ID) }
     single {
         UserDataCleaner {
+            // Stop this device getting the old account's pushes.
+            get<PushRegistrar>().unregister()
             get<PostRepository>().clearDrafts()
             get<FeedRepository>().clearCache()
             get<WorkManagerSyncScheduler>().cancel()
@@ -175,4 +186,15 @@ val chatModule = module {
     viewModel { params -> ThreadViewModel(params.get(), get(), get(), get(), get()) }
 }
 
-val appModules = listOf(coreModule, authModule, postModule, profileModule, socialModule, engagementModule, chatModule)
+val notificationsModule = module {
+    single { NotificationsApi(get()) }
+    single { NotificationsRepository(get(), get()) }
+    single { ActivityBadge(get(), get()) }
+    single<PushTokens> { FirebasePushTokens(androidContext()) }
+    single { PushRegistrar(get(), get()) }
+    single { SystemNotifier(androidContext()) }
+    single { PendingDeepLinks() }
+    viewModelOf(::ActivityViewModel)
+}
+
+val appModules = listOf(coreModule, authModule, postModule, profileModule, socialModule, engagementModule, chatModule, notificationsModule)

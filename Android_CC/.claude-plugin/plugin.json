@@ -1,6 +1,6 @@
 {
   "name": "android-cc",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Android-focused Claude Code setup: agents, skills, commands, rules and hooks for Compose + Kotlin (and Ktor backend) development, evolved from real projects.",
   "keywords": ["android", "kotlin", "jetpack-compose", "navigation3", "ktor", "gradle", "testing"]
 }

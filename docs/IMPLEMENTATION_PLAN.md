@@ -17,7 +17,8 @@ Versions were checked against Google Maven, Maven Central, and the Gradle Plugin
 | M4 Follow, feed, search, explore | Done | 37 server tests, 69 app unit tests; journeys `m4-social.xml` + `m4-offline.xml` passed |
 | M5 Likes, comments, offline action queue | Done | 40 server tests, 74 app unit tests; journeys `m5-engagement.xml` + `m5-offline-queue.xml` passed |
 | M6 Real-time DMs | Done | 42 server tests, 77 app unit tests; journey `m6-dm.xml` passed |
-| M7–M8 | Not started | |
+| M7 Notifications + FCM | Done | 44 server tests, 84 app unit tests; journey `m7-notifications.xml` passed (FCM delivery itself needs a Firebase project; see `docs/running-the-app.md`) |
+| M8 | Not started | |
 
 Changes from this plan made during M2:
 - Kotlin 2.4.20 is applied by putting `kotlin-gradle-plugin` on the root buildscript classpath (AGP 9 built-in Kotlin, per the AGP 9.0 release notes).
@@ -247,3 +248,13 @@ Changes made during M6:
 - DMs reuse the M5 offline action queue (type `message`, idempotent `PUT /conversations/{id}/messages/{clientId}`).
 - The WebSocket is open only while signed in **and** foregrounded; background delivery is M7's FCM.
 - Message history loads the latest page (50); older pages and unread badges on the tab bar are not implemented yet.
+
+Changes made during M7:
+- DMs don't create activity rows (the inbox already tracks unread messages); they only push to offline recipients. The activity feed covers like, comment and follow.
+- Repeated like/follow by the same person collapses to one row (V3 partial unique indexes); unlike/unfollow removes it, and deleting a comment cascades its row.
+- Pushes are data-only messages built by the app (two channels: Messages, Activity; one notification per tag, e.g. per post or per sender). They're sent fire-and-forget after commit, only when the recipient has no live socket; tokens FCM reports as UNREGISTERED/INVALID_ARGUMENT are pruned.
+- Firebase is optional on both sides: the server uses `NoopPushSender` without `FIREBASE_CREDENTIALS_FILE`; the app applies the google-services plugin only when `app/google-services.json` exists.
+- Registration tokens (not the newer Firebase Installation IDs): both are co-supported and the Admin SDK targets tokens. On logout the token is deleted on the device (works even when the session already expired); the server prunes it on the next send.
+- Chat deep links use the peer's username (`insta://chat/{username}`) because threads are opened by username. Also `insta://activity`. A chat link builds Home › Inbox › Thread and replaces an already open thread.
+- Extra endpoints: `GET /notifications/unread-count`, `DELETE /me/devices/{token}`. Socket events: `notification.new` (with the unread count) and `badge`.
+- POST_NOTIFICATIONS is asked from a dismissible card on the Activity tab, not at startup.

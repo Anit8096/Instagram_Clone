@@ -7,6 +7,9 @@ import coil3.SingletonImageLoader
 import com.android.insta.di.APP_SCOPE
 import com.android.insta.di.appModules
 import com.android.insta.feature.chat.data.RealtimeClient
+import com.android.insta.feature.notifications.data.ActivityBadge
+import com.android.insta.feature.notifications.data.PushRegistrar
+import com.android.insta.feature.notifications.push.SystemNotifier
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -28,6 +31,10 @@ class InstaApp : Application(), SingletonImageLoader.Factory {
         }
         // Realtime socket: open while signed in and in the foreground.
         get<RealtimeClient>().bind(get(APP_SCOPE), get())
+        // Activity badge (socket-driven) and FCM token registration follow the session.
+        get<ActivityBadge>().bind(get(APP_SCOPE), get())
+        get<PushRegistrar>().bind(get(APP_SCOPE), get())
+        get<SystemNotifier>().createChannels()
     }
 
     /** Coil's AsyncImage uses the Koin-provided loader (shared HttpClient + disk cache). */

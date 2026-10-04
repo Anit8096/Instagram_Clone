@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Requested in context from the Activity tab (API 33+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".InstaApp"
@@ -17,6 +19,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Insta.Starting"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -24,7 +27,23 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- insta://post/{id}, insta://user/{username}, insta://chat/{username}, insta://activity -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:scheme="insta" />
+            </intent-filter>
         </activity>
+
+        <service
+            android:name=".feature.notifications.push.InstaMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <!-- WorkManager is initialised by Koin (workManagerFactory) so workers get injected dependencies. -->
         <provider

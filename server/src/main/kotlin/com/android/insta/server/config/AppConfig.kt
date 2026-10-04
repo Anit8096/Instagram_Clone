@@ -12,6 +12,8 @@ data class AppConfig(
     val rateLimit: RateLimitConfig,
     val mediaRoot: String,
     val maxUploadBytes: Long = 10L * 1024 * 1024,
+    /** Firebase service-account JSON; null = push disabled (NoopPushSender). */
+    val firebaseCredentialsFile: String? = null,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -45,6 +47,7 @@ data class AppConfig(
                 ),
                 mediaRoot = get("MEDIA_ROOT", "/data/media"),
                 maxUploadBytes = get("MAX_UPLOAD_MB", "10").toLong() * 1024 * 1024,
+                firebaseCredentialsFile = get("FIREBASE_CREDENTIALS_FILE", "").ifBlank { null },
             )
         }
     }

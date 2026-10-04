@@ -1,0 +1,20 @@
+<journey name="M7 activity badge, activity list, notification permission and deep links">
+   <description>
+      Signed in as journey.user (who has at least one post), app in the foreground, backend reachable, notification
+      permission not yet granted (API 33+). After step 1 the harness comments on journey.user's latest post as
+      journey.friend through the API. Before step 9 the harness runs
+      `adb shell am start -a android.intent.action.VIEW -d insta://chat/journey.friend`.
+   </description>
+   <actions>
+     <action>Verify that the Home screen is shown</action>
+     <action>Verify within 10 seconds, without any tap, that the "Activity" navigation item shows a badge for 1 new notification</action>
+     <action>Tap the "Activity" navigation item</action>
+     <action>Verify that the Activity screen lists "journey.friend commented: Nice shot from M7!" and that the "Activity" navigation item no longer shows a badge</action>
+     <action>Verify that a "Turn on notifications" card is shown and tap its "Turn on" button</action>
+     <action>Tap "Allow" in the system permission dialog</action>
+     <action>Verify that the "Turn on notifications" card is gone</action>
+     <action>Tap the "journey.friend commented: Nice shot from M7!" row and verify that the Comments screen shows "Nice shot from M7!"</action>
+     <action>Verify that the conversation with journey.friend is shown (opened by the deep link)</action>
+     <action>Tap the "Back" button and verify that the Messages screen is shown</action>
+   </actions>
+</journey>

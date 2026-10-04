@@ -15,6 +15,27 @@ class Navigator(private val state: NavigationState) {
     }
 
     /**
+     * Opens a deep-link target with a sensible back stack: a conversation goes on the Home tab above the Inbox (the
+     * way it's normally reached); other screens are pushed onto the current tab. Re-opening the screen that is already
+     * on top does nothing, so tapping a second notification for the same thread doesn't stack duplicates.
+     */
+    fun openDeepLink(route: NavKey) {
+        when (route) {
+            in state.backStacks.keys -> navigate(route)
+            is DetailRoute.Thread -> {
+                state.topLevelRoute = state.startRoute
+                val stack = currentStack()
+                if (stack.lastOrNull() == route) return
+                // Another conversation replaces the open one, so back still leads to the inbox.
+                if (stack.lastOrNull() is DetailRoute.Thread) stack.removeAt(stack.lastIndex)
+                if (stack.lastOrNull() != DetailRoute.Inbox) stack.add(DetailRoute.Inbox)
+                stack.add(route)
+            }
+            else -> if (currentStack().lastOrNull() != route) currentStack().add(route)
+        }
+    }
+
+    /**
      * Pops within the current tab. At a tab's root, goes back to the start tab. Returns false at the
      * start tab's root, where the system should handle back (leave the app).
      */

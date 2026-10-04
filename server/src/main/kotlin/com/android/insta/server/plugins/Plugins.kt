@@ -10,6 +10,7 @@ import com.android.insta.server.media.mediaUploadRoutes
 import com.android.insta.server.posts.postRoutes
 import com.android.insta.server.posts.engagementRoutes
 import com.android.insta.server.chat.chatRoutes
+import com.android.insta.server.notifications.notificationRoutes
 import com.android.insta.server.social.socialRoutes
 import com.android.insta.server.users.meRoutes
 import io.ktor.http.HttpHeaders
@@ -125,6 +126,7 @@ fun Application.configureRouting() {
                 socialRoutes()
                 engagementRoutes()
                 chatRoutes()
+                notificationRoutes()
             }
         }
     }

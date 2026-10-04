@@ -67,6 +67,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -87,7 +88,9 @@ class InboxViewModel(private val api: ChatApi, realtime: RealtimeClient, queue: 
     init {
         load()
         // Any incoming message, read receipt or delivered send changes previews/unread counts.
-        viewModelScope.launch { merge(realtime.events, queue.messagesSynced).collect { load() } }
+        viewModelScope.launch {
+            merge(realtime.events.filter { it is RealtimeEvent.MessageNew || it is RealtimeEvent.MessageRead }, queue.messagesSynced).collect { load() }
+        }
     }
 
     fun load() {
@@ -170,6 +173,7 @@ class ThreadViewModel(
                     is RealtimeEvent.MessageRead -> if (event.conversationId == conversationId && event.userId != myId) {
                         _state.update { it.copy(peerLastReadAt = event.readAt) }
                     }
+                    else -> Unit
                 }
             }
         }

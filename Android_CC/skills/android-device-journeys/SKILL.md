@@ -72,6 +72,12 @@ focused()  { android layout --flat | grep -oE '\{[^{}]*"state":\["FOCUSED"\][^{}
 - The keyboard moves the layout: re-read coordinates after focusing.
 - The first `android layout` installs an instrumentation server; give it a moment.
 - For network steps, check server logs for the matching request and status.
+- Badges on navigation items don't show in the layout dump (M3 clears icon semantics); verify them with a screenshot.
+  The dump also omits `stateDescription`.
+- Runtime-permission steps: reset first with `pm revoke <pkg> <perm>` and `pm clear-permission-flags <pkg> <perm> user-set user-fixed`, or the dialog never appears.
+- Deep-link steps: `am start -a android.intent.action.VIEW -d <uri>` while running is delivered to `onNewIntent`
+  (look for "intent has been delivered to currently running top-most instance"); also test a cold start after `am force-stop`.
+- Harness API calls (acting as a second user) go in a small script file rather than a one-line shell chain; it's easier to re-run and to read in the results.
 
 ## 5. Report
 `journeys/results/<name>-results.md` in the journeys.md format: ✅/❌ per action, commands,

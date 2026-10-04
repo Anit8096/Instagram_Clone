@@ -13,6 +13,8 @@ import com.android.insta.server.db.Conversations
 import com.android.insta.server.db.Messages
 import com.android.insta.server.db.Users
 import com.android.insta.server.media.mediaUrl
+import com.android.insta.server.notifications.NotificationDto
+import com.android.insta.server.notifications.NotificationService
 import com.android.insta.server.plugins.currentUserId
 import com.android.insta.server.users.UserRepository
 import io.ktor.http.HttpStatusCode
@@ -79,6 +81,13 @@ sealed interface RealtimeEvent {
 
     @Serializable @SerialName("message.read")
     data class MessageRead(val conversationId: String, val userId: String, val readAt: String) : RealtimeEvent
+
+    @Serializable @SerialName("notification.new")
+    data class NotificationNew(val notification: NotificationDto, val unreadCount: Long) : RealtimeEvent
+
+    /** Unread activity count changed elsewhere (e.g. marked read on another device). */
+    @Serializable @SerialName("badge")
+    data class Badge(val unreadNotifications: Long) : RealtimeEvent
 }
 
 /** Open WebSocket sessions per user (a user may be connected from several devices). */
@@ -108,6 +117,7 @@ class ChatService(
     private val users: UserRepository,
     private val registry: ConnectionRegistry,
     private val clock: Clock,
+    private val notifications: NotificationService,
 ) {
     /** Get-or-create the 1:1 conversation; `user_a < user_b` keeps the pair unique whoever starts it. */
     suspend fun open(me: Uuid, username: String): ConversationDto {
@@ -185,7 +195,11 @@ class ChatService(
             }
             Triple(Messages.selectAll().where { Messages.id eq messageId }.single().toMessage(), true, members)
         }
-        if (created) registry.send(members, RealtimeEvent.MessageNew(message))
+        if (created) {
+            registry.send(members, RealtimeEvent.MessageNew(message))
+            val recipient = members.first { it != me }
+            users.findById(me)?.let { sender -> notifications.deliverMessage(recipient, sender.username, message.body) }
+        }
         return message to created
     }
 

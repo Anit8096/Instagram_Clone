@@ -61,6 +61,7 @@ Hooks need Node.js on PATH.
 | `offline-first-feed` | Written from experience: Paging 3 RemoteMediator + Room 3 cache, offline banner, refresh signals, schema export + AutoMigration |
 | `offline-action-queue` | Written from experience: Room-persisted actions, optimistic UI, ordered WorkManager delivery, collapse/reject/merge rules, idempotent Ktor endpoints |
 | `realtime-websocket-chat` | Written from experience: Ktor WebSocket push with a sessions registry, typed events, foreground-only Android socket, idempotent sends, seen receipts |
+| `push-notifications-fcm` | Written from experience: transactional activity rows with schema-level dedup, socket-first delivery with FCM only for offline users, optional Firebase, channels, contextual permission, custom-scheme deep links into Nav3 back stacks |
 
 Android CLI skills are copies of the versions installed by `android skills`. Their `SKILL.md`
 refers to the publisher's license terms. Refresh with `android skills update`. Only skills actually

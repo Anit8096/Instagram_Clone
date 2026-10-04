@@ -6,10 +6,18 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import com.android.insta.feature.notifications.data.ActivityBadge
+import com.android.insta.feature.notifications.ui.ActivityScreen
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -25,7 +33,6 @@ import androidx.navigation3.ui.NavDisplay
 import com.android.insta.R
 import com.android.insta.core.session.SessionManager
 import com.android.insta.core.session.SessionState
-import com.android.insta.core.ui.PlaceholderScreen
 import com.android.insta.feature.auth.ui.LoginScreen
 import com.android.insta.feature.auth.ui.RegisterScreen
 import com.android.insta.feature.engagement.ui.CommentsScreen
@@ -98,10 +105,25 @@ private val TOP_LEVEL_DESTINATIONS: Map<NavKey, TopLevelDestination> = linkedMap
 
 /** Signed-in shell: bottom bar on phones, navigation rail on wider windows. */
 @Composable
-private fun MainShell(myUsername: String, uploadsViewModel: UploadsViewModel = koinViewModel()) {
+private fun MainShell(
+    myUsername: String,
+    uploadsViewModel: UploadsViewModel = koinViewModel(),
+    activityBadge: ActivityBadge = koinInject(),
+    deepLinks: PendingDeepLinks = koinInject(),
+) {
     val navigationState = rememberNavigationState(MainRoute.Feed, TOP_LEVEL_DESTINATIONS.keys)
     val navigator = remember(navigationState) { Navigator(navigationState) }
     val uploads by uploadsViewModel.uploads.collectAsStateWithLifecycle()
+    val unreadActivity by activityBadge.unread.collectAsStateWithLifecycle()
+
+    // Links from notification taps (or `am start -d insta://…`), applied once the shell is showing.
+    val pendingLink by deepLinks.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingLink) {
+        val link = pendingLink ?: return@LaunchedEffect
+        val route = if (link is DetailRoute.UserProfile && link.username == myUsername) MainRoute.Profile else link
+        navigator.openDeepLink(route)
+        deepLinks.consume()
+    }
 
     val labels = TOP_LEVEL_DESTINATIONS.mapValues { (_, destination) -> stringResource(destination.label) }
     val openPost: (String) -> Unit = { navigator.navigate(DetailRoute.PostDetail(it)) }
@@ -135,7 +157,7 @@ private fun MainShell(myUsername: String, uploadsViewModel: UploadsViewModel = k
             CreatePostScreen(onShared = { navigator.navigate(MainRoute.Profile) })
         }
         entry<MainRoute.Notifications> {
-            PlaceholderScreen(stringResource(R.string.tab_notifications), stringResource(R.string.placeholder_notifications))
+            ActivityScreen(onPostClick = openPost, onCommentsClick = openComments, onUserClick = openUser)
         }
         entry<MainRoute.Profile> {
             ProfileScreen(
@@ -170,14 +192,26 @@ private fun MainShell(myUsername: String, uploadsViewModel: UploadsViewModel = k
         }
     }
 
+    val badgeDescription = pluralStringResource(R.plurals.cd_unread_activity, unreadActivity.toInt(), unreadActivity.toInt())
     NavigationSuiteScaffold(
         navigationSuiteItems = {
             TOP_LEVEL_DESTINATIONS.forEach { (route, destination) ->
                 val label = labels.getValue(route)
+                val badged = route == MainRoute.Notifications && unreadActivity > 0
                 item(
+                    // Navigation items clear their icon's semantics, so the badge is announced as the item's state.
+                    modifier = if (badged) Modifier.semantics { stateDescription = badgeDescription } else Modifier,
                     selected = route == navigationState.topLevelRoute,
                     onClick = { navigator.navigate(route) },
-                    icon = { Icon(destination.icon, contentDescription = label) },
+                    icon = {
+                        if (badged) {
+                            BadgedBox(badge = { Badge() }) {
+                                Icon(destination.icon, contentDescription = label)
+                            }
+                        } else {
+                            Icon(destination.icon, contentDescription = label)
+                        }
+                    },
                     label = { Text(label) },
                 )
             }

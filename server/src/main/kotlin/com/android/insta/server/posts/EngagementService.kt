@@ -12,6 +12,10 @@ import com.android.insta.server.db.Likes
 import com.android.insta.server.db.Posts
 import com.android.insta.server.db.Users
 import com.android.insta.server.media.mediaUrl
+import com.android.insta.server.notifications.NotificationService
+import com.android.insta.server.notifications.NotificationType
+import com.android.insta.server.notifications.recordNotification
+import com.android.insta.server.notifications.removeLikeNotification
 import com.android.insta.server.plugins.currentUserId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
@@ -36,6 +40,7 @@ import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.insertIgnore
+import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.jdbc.update
@@ -58,39 +63,46 @@ data class CommentDto(val id: String, val postId: String, val author: AuthorDto,
  * Likes and comments. Every write is idempotent (PUT/DELETE keyed by ids the client chooses) so the app's offline
  * action queue can replay them safely, and counters change in the same transaction as the row they count.
  */
-class EngagementService(private val db: Database, private val clock: Clock) {
+class EngagementService(private val db: Database, private val clock: Clock, private val notifications: NotificationService) {
 
-    suspend fun setLiked(userId: Uuid, postId: Uuid, liked: Boolean): LikeStateDto = suspendTransaction(db) {
-        requirePost(postId)
-        val changed = if (liked) {
-            Likes.insertIgnore {
-                it[Likes.userId] = userId
-                it[Likes.postId] = postId
-                it[createdAt] = now()
-            }.insertedCount
-        } else {
-            Likes.deleteWhere { (Likes.userId eq userId) and (Likes.postId eq postId) }
-        }
-        if (changed > 0) {
-            Posts.update({ Posts.id eq postId }) {
-                if (liked) it[likeCount] = likeCount + 1 else it[likeCount] = likeCount - 1
+    suspend fun setLiked(userId: Uuid, postId: Uuid, liked: Boolean): LikeStateDto {
+        val (state, notificationId) = suspendTransaction(db) {
+            val author = requirePost(postId)
+            val changed = if (liked) {
+                Likes.insertIgnore {
+                    it[Likes.userId] = userId
+                    it[Likes.postId] = postId
+                    it[createdAt] = now()
+                }.insertedCount
+            } else {
+                Likes.deleteWhere { (Likes.userId eq userId) and (Likes.postId eq postId) }
             }
+            var notificationId: Uuid? = null
+            if (changed > 0) {
+                Posts.update({ Posts.id eq postId }) {
+                    if (liked) it[likeCount] = likeCount + 1 else it[likeCount] = likeCount - 1
+                }
+                if (liked) notificationId = recordNotification(author, userId, NotificationType.LIKE, now(), postId = postId)
+                else removeLikeNotification(userId, postId)
+            }
+            LikeStateDto(liked, Posts.selectAll().where { Posts.id eq postId }.single()[Posts.likeCount]) to notificationId
         }
-        LikeStateDto(liked, Posts.selectAll().where { Posts.id eq postId }.single()[Posts.likeCount])
+        notificationId?.let { notifications.deliver(it) }
+        return state
     }
 
     /** `PUT /posts/{postId}/comments/{commentId}`: a retry with the same id returns the existing comment. */
     suspend fun addComment(userId: Uuid, postId: Uuid, commentId: Uuid, rawBody: String): Pair<CommentDto, Boolean> {
         val body = rawBody.trim()
         if (body.isEmpty() || body.length > BODY_MAX) throw ValidationException(mapOf("body" to "1-$BODY_MAX characters"))
-        return suspendTransaction(db) {
+        val (comment, created, notificationId) = suspendTransaction(db) {
             findComment(commentId)?.let { existing ->
                 if (existing[Comments.authorId] != userId || existing[Comments.postId] != postId) {
                     throw ApiException(HttpStatusCode.Conflict, "COMMENT_ID_CONFLICT", "Comment id already used")
                 }
-                return@suspendTransaction existing.toComment() to false
+                return@suspendTransaction Triple(existing.toComment(), false, null)
             }
-            requirePost(postId)
+            val author = requirePost(postId)
             Comments.insert {
                 it[id] = commentId
                 it[Comments.postId] = postId
@@ -99,8 +111,11 @@ class EngagementService(private val db: Database, private val clock: Clock) {
                 it[createdAt] = now()
             }
             Posts.update({ Posts.id eq postId }) { it[commentCount] = commentCount + 1 }
-            findComment(commentId)!!.toComment() to true
+            val notificationId = recordNotification(author, userId, NotificationType.COMMENT, now(), postId = postId, commentId = commentId)
+            Triple(findComment(commentId)!!.toComment(), true, notificationId)
         }
+        notificationId?.let { notifications.deliver(it) }
+        return comment to created
     }
 
     /** Oldest first, like a conversation. */
@@ -140,11 +155,10 @@ class EngagementService(private val db: Database, private val clock: Clock) {
     private fun JdbcTransaction.findComment(id: Uuid): ResultRow? =
         commentsWithAuthors().selectAll().where { Comments.id eq id }.singleOrNull()
 
-    private fun JdbcTransaction.requirePost(postId: Uuid) {
-        if (Posts.selectAll().where { Posts.id eq postId }.empty()) {
-            throw ApiException(HttpStatusCode.NotFound, "NOT_FOUND", "Post not found")
-        }
-    }
+    /** Returns the post's author. */
+    private fun JdbcTransaction.requirePost(postId: Uuid): Uuid =
+        Posts.select(Posts.authorId).where { Posts.id eq postId }.singleOrNull()?.get(Posts.authorId)
+            ?: throw ApiException(HttpStatusCode.NotFound, "NOT_FOUND", "Post not found")
 
     private fun now() = OffsetDateTime.now(clock.withZone(ZoneOffset.UTC))
 

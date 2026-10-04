@@ -8,6 +8,7 @@ import com.android.insta.core.network.jsonBody
 import com.android.insta.core.network.safeApiCall
 import com.android.insta.core.session.SessionManager
 import com.android.insta.core.session.SessionState
+import com.android.insta.feature.notifications.data.NotificationDto
 import com.android.insta.feature.post.data.PageDto
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.webSocket
@@ -66,6 +67,12 @@ sealed interface RealtimeEvent {
 
     @Serializable @SerialName("message.read")
     data class MessageRead(val conversationId: String, val userId: String, val readAt: String) : RealtimeEvent
+
+    @Serializable @SerialName("notification.new")
+    data class NotificationNew(val notification: NotificationDto, val unreadCount: Long) : RealtimeEvent
+
+    @Serializable @SerialName("badge")
+    data class Badge(val unreadNotifications: Long) : RealtimeEvent
 }
 
 class ChatApi(private val client: HttpClient) {
@@ -85,7 +92,7 @@ class ChatApi(private val client: HttpClient) {
 
 /**
  * One WebSocket to `/api/v1/ws` while the user is signed in **and** the app is in the foreground (no socket in the
- * background; push notifications cover that later). Reconnects with exponential backoff; events fan out via [events].
+ * background, where FCM pushes take over). Reconnects with exponential backoff; events fan out via [events].
  */
 class RealtimeClient(
     private val client: HttpClient,

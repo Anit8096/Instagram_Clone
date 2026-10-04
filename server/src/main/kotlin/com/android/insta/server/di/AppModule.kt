@@ -18,10 +18,16 @@ import com.android.insta.server.posts.PostService
 import com.android.insta.server.posts.EngagementService
 import com.android.insta.server.chat.ChatService
 import com.android.insta.server.chat.ConnectionRegistry
+import com.android.insta.server.notifications.FcmPushSender
+import com.android.insta.server.notifications.NoopPushSender
+import com.android.insta.server.notifications.NotificationService
+import com.android.insta.server.notifications.PushSender
 import com.android.insta.server.social.SocialService
 import com.android.insta.server.users.ProfileService
 import com.android.insta.server.users.UserRepository
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.koin.core.module.dsl.onClose
+import org.koin.core.module.dsl.withOptions
 import org.koin.dsl.module
 import java.time.Clock
 
@@ -45,8 +51,12 @@ fun appModule(config: AppConfig, database: Database) = module {
     single { PostRepository(get()) }
     single { PostService(get(), get(), get(), get(), get()) }
     single { ProfileService(get(), get(), get(), get(), get()) }
-    single { SocialService(get(), get(), get()) }
-    single { EngagementService(get(), get()) }
+    single { SocialService(get(), get(), get(), get()) }
+    single { EngagementService(get(), get(), get()) }
     single { ConnectionRegistry() }
-    single { ChatService(get(), get(), get(), get()) }
+    single { ChatService(get(), get(), get(), get(), get()) }
+
+    // Push is optional: without a Firebase service-account file the stack runs with in-app notifications only.
+    single<PushSender> { config.firebaseCredentialsFile?.let(::FcmPushSender) ?: NoopPushSender }
+    single { NotificationService(get(), get(), get(), get()) } withOptions { onClose { it?.close() } }
 }

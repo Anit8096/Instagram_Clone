@@ -7,6 +7,10 @@ import com.android.insta.server.common.PageRequest
 import com.android.insta.server.db.Follows
 import com.android.insta.server.db.Users
 import com.android.insta.server.media.mediaUrl
+import com.android.insta.server.notifications.NotificationService
+import com.android.insta.server.notifications.NotificationType
+import com.android.insta.server.notifications.recordNotification
+import com.android.insta.server.notifications.removeFollowNotification
 import com.android.insta.server.users.UserRepository
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.Serializable
@@ -38,26 +42,37 @@ data class UserSummaryDto(val id: String, val username: String, val displayName:
 @Serializable
 data class FollowStateDto(val isFollowing: Boolean, val followerCount: Long)
 
-class SocialService(private val db: Database, private val users: UserRepository, private val clock: Clock) {
+class SocialService(
+    private val db: Database,
+    private val users: UserRepository,
+    private val clock: Clock,
+    private val notifications: NotificationService,
+) {
 
     /** Idempotent: following twice is still "following". */
     suspend fun follow(followerId: Uuid, username: String): FollowStateDto {
         val target = targetId(username)
         if (target == followerId) throw ApiException(HttpStatusCode.BadRequest, "CANNOT_FOLLOW_SELF", "You can't follow yourself")
-        suspendTransaction(db) {
-            Follows.insertIgnore {
+        val notificationId = suspendTransaction(db) {
+            val now = OffsetDateTime.now(clock.withZone(ZoneOffset.UTC))
+            val inserted = Follows.insertIgnore {
                 it[Follows.followerId] = followerId
                 it[followeeId] = target
-                it[createdAt] = OffsetDateTime.now(clock.withZone(ZoneOffset.UTC))
-            }
+                it[createdAt] = now
+            }.insertedCount
+            if (inserted > 0) recordNotification(target, followerId, NotificationType.FOLLOW, now) else null
         }
+        notificationId?.let { notifications.deliver(it) }
         return FollowStateDto(true, followerCount(target))
     }
 
     /** Idempotent: unfollowing someone you don't follow is fine. */
     suspend fun unfollow(followerId: Uuid, username: String): FollowStateDto {
         val target = targetId(username)
-        suspendTransaction(db) { Follows.deleteWhere { (Follows.followerId eq followerId) and (followeeId eq target) } }
+        suspendTransaction(db) {
+            Follows.deleteWhere { (Follows.followerId eq followerId) and (followeeId eq target) }
+            removeFollowNotification(followerId, target)
+        }
         return FollowStateDto(false, followerCount(target))
     }
 

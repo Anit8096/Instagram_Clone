@@ -55,6 +55,8 @@ dependencies {
     runtimeOnly(libs.postgresql)
     implementation(libs.password4j)
     implementation(libs.thumbnailator)
+    // FCM push (FcmPushSender); unused at runtime unless FIREBASE_CREDENTIALS_FILE is set.
+    implementation(libs.firebase.admin)
     runtimeOnly(libs.twelvemonkeys.jpeg)
     runtimeOnly(libs.twelvemonkeys.webp)
     runtimeOnly(libs.logback)

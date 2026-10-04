@@ -85,10 +85,11 @@ abstract class IntegrationTest {
     protected fun withApp(
         config: AppConfig = testConfig(),
         google: GoogleTokenVerifier = FakeGoogleVerifier(),
+        extraModules: List<org.koin.core.module.Module> = emptyList(),
         block: suspend ApplicationTestBuilder.(HttpClient) -> Unit,
     ) = testApplication {
         application {
-            module(config, listOf(koinModule { single<GoogleTokenVerifier> { google } }))
+            module(config, listOf(koinModule { single<GoogleTokenVerifier> { google } }) + extraModules)
         }
         val client = createClient { install(ClientContentNegotiation) { json(AppJson) } }
         block(client)

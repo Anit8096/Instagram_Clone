@@ -60,6 +60,30 @@ The "Continue with Google" button only appears when an OAuth **Web** client ID i
 2. App: `insta.googleServerClientId=<web client id>` (Gradle property or `local.properties`).
 3. Server: `GOOGLE_CLIENT_IDS=<web client id>` in `.env`, then `docker compose up -d server`.
 
+## Push notifications (optional, Firebase)
+
+Without Firebase everything except system push works: the Activity tab, its badge and live updates run over the
+WebSocket. To get pushes while the app is in the background:
+
+1. Create a Firebase project and add an Android app with package `com.android.insta`.
+2. Download `google-services.json` into `app/` (gitignored). The build applies the google-services plugin only when
+   this file exists.
+3. *Project settings → Service accounts → Generate new private key*. Save the JSON into `secrets/` at the repo root
+   (gitignored; mounted read-only at `/run/secrets/insta`), e.g. `secrets/firebase-adminsdk.json`.
+4. In `.env`: `FIREBASE_CREDENTIALS_FILE=/run/secrets/insta/firebase-adminsdk.json`, then `docker compose up -d server`.
+5. Use an emulator image **with Google Play** and allow notifications from the Activity tab's card.
+
+The server only pushes when the recipient has no open socket, so put the app in the background (Home) to see one.
+
+Deep links can be tried without Firebase:
+
+```sh
+adb shell am start -a android.intent.action.VIEW -d insta://chat/<username>
+adb shell am start -a android.intent.action.VIEW -d insta://user/<username>
+adb shell am start -a android.intent.action.VIEW -d insta://post/<post-id>
+adb shell am start -a android.intent.action.VIEW -d insta://activity
+```
+
 ## Tests
 
 ```sh

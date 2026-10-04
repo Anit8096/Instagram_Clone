@@ -27,10 +27,14 @@ services:
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       MEDIA_ROOT: /data/media
+      # Path inside the container, e.g. /run/secrets/insta/firebase-adminsdk.json. Empty = push disabled.
+      FIREBASE_CREDENTIALS_FILE: ${FIREBASE_CREDENTIALS_FILE:-}
     ports:
       - "8080:8080"
     volumes:
       - media:/data/media
+      # ./secrets is gitignored; put the Firebase service-account JSON here.
+      - ./secrets:/run/secrets/insta:ro
 
 volumes:
   pgdata:

@@ -12,6 +12,7 @@ thumbnailator = "0.4.21"
 twelvemonkeys = "3.15.2"
 testcontainers = "2.0.5"
 junit = "5.13.4"
+firebase-admin = "9.11.0"
 
 [libraries]
 ktor-bom = { module = "io.ktor:ktor-bom", version.ref = "ktor" }
@@ -48,6 +49,7 @@ logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 thumbnailator = { module = "net.coobird:thumbnailator", version.ref = "thumbnailator" }
 twelvemonkeys-jpeg = { module = "com.twelvemonkeys.imageio:imageio-jpeg", version.ref = "twelvemonkeys" }
 twelvemonkeys-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
+firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebase-admin" }
 
 testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }

@@ -45,6 +45,27 @@ class NavigatorTest {
     }
 
     @Test
+    fun `chat deep link opens the thread above the inbox on the home tab, once`() {
+        navigator.navigate(MainRoute.Explore)
+        repeat(2) { navigator.openDeepLink(DetailRoute.Thread("bob")) }
+        assertEquals(MainRoute.Feed, state.topLevelRoute)
+        assertEquals(listOf(MainRoute.Feed, DetailRoute.Inbox, DetailRoute.Thread("bob")), state.backStacks.getValue(MainRoute.Feed).toList())
+
+        navigator.openDeepLink(DetailRoute.Thread("carol")) // another conversation replaces the open one
+        assertEquals(listOf(MainRoute.Feed, DetailRoute.Inbox, DetailRoute.Thread("carol")), state.backStacks.getValue(MainRoute.Feed).toList())
+    }
+
+    @Test
+    fun `other deep links push onto the current tab or switch tabs`() {
+        navigator.navigate(MainRoute.Explore)
+        repeat(2) { navigator.openDeepLink(DetailRoute.PostDetail("p1")) }
+        assertEquals(listOf(MainRoute.Explore, DetailRoute.PostDetail("p1")), state.backStacks.getValue(MainRoute.Explore).toList())
+
+        navigator.openDeepLink(MainRoute.Profile)
+        assertEquals(MainRoute.Profile, state.topLevelRoute)
+    }
+
+    @Test
     fun `back pops within a tab, then returns to the start tab, then lets the system exit`() {
         navigator.navigate(MainRoute.Explore)
         navigator.navigate(PostDetail)

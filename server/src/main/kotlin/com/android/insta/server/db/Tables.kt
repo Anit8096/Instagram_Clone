@@ -109,3 +109,24 @@ object ConversationReads : Table("conversation_reads") {
 
     override val primaryKey = PrimaryKey(conversationId, userId)
 }
+
+object Notifications : Table("notifications") {
+    val id = uuid("id")
+    val recipientId = uuid("recipient_id")
+    val actorId = uuid("actor_id")
+    val type = varchar("type", 16)
+    val postId = uuid("post_id").nullable()
+    val commentId = uuid("comment_id").nullable()
+    val readAt = timestampWithTimeZone("read_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object DeviceTokens : Table("device_tokens") {
+    val fcmToken = varchar("fcm_token", 512)
+    val userId = uuid("user_id")
+    val updatedAt = timestampWithTimeZone("updated_at")
+
+    override val primaryKey = PrimaryKey(fcmToken)
+}

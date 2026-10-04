@@ -44,7 +44,7 @@
     <string name="tab_notifications">Activity</string>
     <string name="tab_profile">Profile</string>
     <string name="placeholder_create">Share a photo with your followers.</string>
-    <string name="placeholder_notifications">Likes, comments, follows and messages will appear here.</string>
+    <string name="placeholder_notifications">When people like or comment on your posts, or follow you, you\'ll see it here.</string>
 
     <!-- Create post -->
     <string name="create_title">New post</string>
@@ -128,4 +128,22 @@
     <string name="action_send_message">Send message</string>
     <string name="action_message">Message</string>
     <string name="message_seen">Seen</string>
+
+    <!-- Activity and push notifications -->
+    <string name="activity_title">Activity</string>
+    <string name="activity_liked">liked your post.</string>
+    <string name="activity_commented">commented: %1$s</string>
+    <string name="activity_followed">started following you.</string>
+    <string name="notifications_prompt_title">Turn on notifications</string>
+    <string name="notifications_prompt_body">Find out when someone messages you, follows you, or likes or comments on your posts.</string>
+    <string name="action_not_now">Not now</string>
+    <string name="action_turn_on">Turn on</string>
+    <string name="channel_messages">Messages</string>
+    <string name="channel_messages_description">New direct messages</string>
+    <string name="channel_activity">Activity</string>
+    <string name="channel_activity_description">Likes, comments and new followers</string>
+    <plurals name="cd_unread_activity">
+        <item quantity="one">%1$d new notification</item>
+        <item quantity="other">%1$d new notifications</item>
+    </plurals>
 </resources>

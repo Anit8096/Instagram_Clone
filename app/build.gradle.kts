@@ -25,6 +25,12 @@ room3 {
     schemaDirectory("$projectDir/schemas")
 }
 
+// Firebase is optional: with app/google-services.json (gitignored) present the plugin wires up FCM; without it the
+// app builds and runs with in-app notifications only (FirebaseApp is simply not initialised).
+if (file("google-services.json").exists()) {
+    apply(plugin = libs.plugins.google.services.get().pluginId)
+}
+
 android {
     namespace = "com.android.insta"
     compileSdk {
@@ -117,6 +123,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.ktor3)
     implementation(libs.koin.androidx.workmanager)
+    // FCM push (InstaMessagingService); inert unless google-services.json is present.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

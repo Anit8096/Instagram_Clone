@@ -22,6 +22,8 @@ work = "2.12.0"
 coil = "3.6.3"
 exifinterface = "1.4.2"
 paging = "3.5.1"
+firebaseBom = "34.19.0"
+googleServices = "4.5.0"
 # Testing
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -87,6 +89,8 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-ktor3 = { group = "io.coil-kt.coil3", name = "coil-network-ktor3", version.ref = "coil" }
 koin-androidx-workmanager = { group = "io.insert-koin", name = "koin-androidx-workmanager" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
@@ -103,3 +107,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 androidx-room3 = { id = "androidx.room3", version.ref = "room3" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
