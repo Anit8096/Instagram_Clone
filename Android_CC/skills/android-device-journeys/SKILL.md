@@ -77,6 +77,10 @@ focused()  { android layout --flat | grep -oE '\{[^{}]*"state":\["FOCUSED"\][^{}
 - Runtime-permission steps: reset first with `pm revoke <pkg> <perm>` and `pm clear-permission-flags <pkg> <perm> user-set user-fixed`, or the dialog never appears.
 - Deep-link steps: `am start -a android.intent.action.VIEW -d <uri>` while running is delivered to `onNewIntent`
   (look for "intent has been delivered to currently running top-most instance"); also test a cold start after `am force-stop`.
+- Closing the keyboard with `KEYCODE_BACK` inside a dialog dismisses the **dialog** if the keyboard was already hidden: re-read the layout before the next tap.
+- Password fields show bullets in the dump: compare the bullet count with the expected length to confirm the input landed.
+- Repeated sign-ins: put the form-filling (tap field, clear with `KEYCODE_MOVE_END` + `KEYCODE_DEL`, type, submit) in a script that takes the user and password.
+- Theme and text size: `cmd uimode night yes|no` and `settings put system font_scale 1.3|1.0`; always reset them.
 - Harness API calls (acting as a second user) go in a small script file rather than a one-line shell chain; it's easier to re-run and to read in the results.
 
 ## 5. Report

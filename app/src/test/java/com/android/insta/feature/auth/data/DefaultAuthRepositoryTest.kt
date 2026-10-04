@@ -81,4 +81,18 @@ class DefaultAuthRepositoryTest {
         assertNull(store.current())
         assertTrue(google.cleared)
     }
+
+    @Test
+    fun `deleting the account signs out locally only on success`() = runTest {
+        store.save(Session("a1", "r1", TEST_USER))
+        val refused = repository(HttpStatusCode.Forbidden, """{"error":{"code":"REAUTH_FAILED","message":"no"}}""").deleteAccount("wrong", null)
+        assertEquals("REAUTH_FAILED", ((refused as ApiResult.Failure).error as AppError.Api).code)
+        assertEquals("a1", store.current()?.accessToken) // still signed in
+
+        requests.clear()
+        assertEquals(ApiResult.Success(Unit), repository(HttpStatusCode.NoContent, "").deleteAccount("right", null))
+        assertEquals(listOf("DELETE /api/v1/me"), requests) // no logout call: the server already revoked everything
+        assertNull(store.current())
+        assertTrue(google.cleared)
+    }
 }

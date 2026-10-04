@@ -7,6 +7,7 @@ import io.ktor.client.plugins.auth.AuthCircuitBreaker
 import io.ktor.client.plugins.auth.authProvider
 import io.ktor.client.plugins.auth.providers.BearerAuthProvider
 import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.delete
 import io.ktor.client.request.post
 import com.android.insta.core.network.jsonBody
 
@@ -23,6 +24,10 @@ class AuthApi(private val client: HttpClient) {
 
     suspend fun logout(request: RefreshRequest): ApiResult<Unit> =
         safeApiCall { client.post("api/v1/auth/logout") { unauthenticated(); jsonBody(request) } }
+
+    /** Authenticated; the server answers 403 REAUTH_FAILED (not 401) on a wrong password, so no refresh loop. */
+    suspend fun deleteAccount(request: DeleteAccountRequest): ApiResult<Unit> =
+        safeApiCall { client.delete("api/v1/me") { jsonBody(request) } }
 
     /** Drops the Auth plugin's cached tokens so the next request reloads them from the session store. */
     fun clearCachedTokens() {

@@ -52,6 +52,7 @@ import com.android.insta.feature.profile.data.ProfileApi
 import com.android.insta.feature.profile.data.ProfileRepository
 import com.android.insta.feature.profile.ui.EditProfileViewModel
 import com.android.insta.feature.profile.ui.ProfileViewModel
+import com.android.insta.feature.settings.ui.SettingsViewModel
 import com.android.insta.feature.notifications.data.ActivityBadge
 import com.android.insta.feature.notifications.data.NotificationsApi
 import com.android.insta.feature.notifications.data.NotificationsRepository
@@ -157,7 +158,8 @@ val postModule = module {
 val profileModule = module {
     single { ProfileApi(get()) }
     single<ProfileRepository> { DefaultProfileRepository(get(), get(), get(), get(), get()) }
-    viewModel { params -> ProfileViewModel(params.get(), get(), get(), get(), get()) }
+    viewModel { params -> ProfileViewModel(params.get(), get(), get(), get()) }
+    viewModel { SettingsViewModel(get(), get<GoogleSignInClient>().isConfigured) }
     viewModelOf(::EditProfileViewModel)
 }
 

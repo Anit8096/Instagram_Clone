@@ -51,6 +51,17 @@ adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:
 
 On recent Android versions the picker asks you to tap **Done** after selecting a photo.
 
+## Demo data
+
+```sh
+docker compose exec server java -cp "/app/lib/*" com.android.insta.server.seed.SeedKt
+```
+
+Creates six accounts (`maya.travels`, `leo.bakes`, `ana.draws`, `sam.runs`, `noor.codes`, `kai.garden`, all with
+password `demo-password`), each with an avatar and three posts, plus follows, likes, comments and a conversation
+between maya and leo. Running it again does nothing. Outside Docker: `cd server && ./gradlew seed` with the same env
+vars as the server.
+
 ## Google sign-in (optional)
 
 The "Continue with Google" button only appears when an OAuth **Web** client ID is configured:

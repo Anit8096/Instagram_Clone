@@ -47,6 +47,7 @@ import com.android.insta.feature.post.ui.UploadBanner
 import com.android.insta.feature.post.ui.UploadsViewModel
 import com.android.insta.feature.profile.ui.EditProfileScreen
 import com.android.insta.feature.profile.ui.ProfileScreen
+import com.android.insta.feature.settings.ui.SettingsScreen
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -166,7 +167,11 @@ private fun MainShell(
                 onEditProfile = { navigator.navigate(DetailRoute.EditProfile) },
                 onCreatePost = openCreate,
                 onFollowsClick = { followers -> openFollows(myUsername, followers) },
+                onSettingsClick = { navigator.navigate(DetailRoute.Settings) },
             )
+        }
+        entry<DetailRoute.Settings> {
+            SettingsScreen(onBack = { navigator.goBack() })
         }
         entry<DetailRoute.UserProfile> { key ->
             ProfileScreen(

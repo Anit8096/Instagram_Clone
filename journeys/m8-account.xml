@@ -1,0 +1,20 @@
+<journey name="M8 settings, account deletion, seeded demo, dark theme and large text">
+   <description>
+      Signed out; backend reachable and seeded (`Seed.kt`); a throwaway account delete.me / delete-password exists.
+      Before step 10 the harness runs `adb shell cmd uimode night yes`; before step 11 `adb shell settings put system font_scale 1.3`
+      (both reverted afterwards).
+   </description>
+   <actions>
+     <action>Log in as "delete.me" with password "delete-password"</action>
+     <action>Tap the "Profile" navigation item, then tap "Settings"</action>
+     <action>Verify that the Settings screen shows "Log out" and "Delete account"</action>
+     <action>Tap "Delete account", enter "wrong-password" and tap "Delete"</action>
+     <action>Verify that "That didn't match. Check your password and try again." is shown and the dialog is still open</action>
+     <action>Replace the password with "delete-password" and tap "Delete"</action>
+     <action>Verify that the sign-in screen is shown</action>
+     <action>Log in as "delete.me" with password "delete-password" and verify "Incorrect username/email or password" is shown</action>
+     <action>Log in as "maya.travels" with password "demo-password" and verify the Home feed shows posts from other demo accounts</action>
+     <action>Verify that the Home feed is readable in dark theme</action>
+     <action>Open the Profile tab and verify that the header, counts and buttons stay readable and unclipped at 130% font size</action>
+   </actions>
+</journey>

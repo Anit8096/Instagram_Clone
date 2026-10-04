@@ -67,6 +67,13 @@ class FakeAuthRepository : AuthRepository {
     override suspend fun logout() {
         calls += "logout"
     }
+
+    var deleteResult: ApiResult<Unit> = ApiResult.Success(Unit)
+
+    override suspend fun deleteAccount(password: String?, googleIdToken: String?): ApiResult<Unit> {
+        calls += "delete:${password ?: "-"}:${googleIdToken ?: "-"}"
+        return deleteResult
+    }
 }
 
 class FakeGoogleSignInClient(

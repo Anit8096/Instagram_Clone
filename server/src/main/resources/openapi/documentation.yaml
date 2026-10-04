@@ -129,6 +129,26 @@ paths:
         '400': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
 
+    delete:
+      tags: [users]
+      summary: Permanently delete the account (re-authentication required)
+      description: >
+        Cascades posts, media (files removed after commit), comments, likes, follows, conversations, notifications,
+        device and refresh tokens. Password accounts send `password`; Google-only accounts send a fresh `googleIdToken`.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: { type: string }
+                googleIdToken: { type: string }
+      responses:
+        '204': { description: Deleted }
+        '403': { $ref: '#/components/responses/Error' }
+
   /api/v1/media:
     post:
       tags: [media]

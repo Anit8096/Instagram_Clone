@@ -8,6 +8,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
 import org.koin.ktor.ext.inject
@@ -17,6 +18,7 @@ fun Route.meRoutes() {
     val users by inject<UserRepository>()
     val profiles by inject<ProfileService>()
     val posts by inject<PostService>()
+    val accounts by inject<AccountService>()
 
     get("/me") {
         val user = users.findById(call.currentUserId())
@@ -25,6 +27,10 @@ fun Route.meRoutes() {
     }
     patch("/me") {
         call.respond(profiles.update(call.currentUserId(), call.receive<UpdateProfileRequest>()))
+    }
+    delete("/me") {
+        accounts.delete(call.currentUserId(), call.receive<DeleteAccountRequest>())
+        call.respond(HttpStatusCode.NoContent)
     }
     get("/users/{username}") {
         call.respond(profiles.profile(call.currentUserId(), call.parameters["username"].orEmpty()))

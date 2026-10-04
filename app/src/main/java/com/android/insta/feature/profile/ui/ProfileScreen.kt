@@ -61,10 +61,11 @@ fun ProfileScreen(
     onCreatePost: () -> Unit,
     onBack: (() -> Unit)? = null,
     onMessageClick: (String) -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel(key = "profile-$username") { parametersOf(username) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    ProfileContent(state, viewModel::onEvent, onPostClick, onEditProfile, onCreatePost, onBack, onFollowsClick, onMessageClick)
+    ProfileContent(state, viewModel::onEvent, onPostClick, onEditProfile, onCreatePost, onBack, onFollowsClick, onMessageClick, onSettingsClick)
 }
 
 @Composable
@@ -77,6 +78,7 @@ fun ProfileContent(
     onBack: (() -> Unit)? = null,
     onFollowsClick: (followers: Boolean) -> Unit = {},
     onMessageClick: (String) -> Unit = {},
+    onSettingsClick: () -> Unit = {},
 ) {
     val profile = state.profile
     if (profile == null) {
@@ -116,7 +118,7 @@ fun ProfileContent(
             modifier = Modifier.fillMaxSize(),
         ) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "header") {
-                ProfileHeader(profile, state, onEvent, onEditProfile, onBack, onFollowsClick, onMessageClick)
+                ProfileHeader(profile, state, onEvent, onEditProfile, onBack, onFollowsClick, onMessageClick, onSettingsClick)
             }
             if (state.posts.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
@@ -162,6 +164,7 @@ private fun ProfileHeader(
     onBack: (() -> Unit)?,
     onFollowsClick: (followers: Boolean) -> Unit,
     onMessageClick: (String) -> Unit,
+    onSettingsClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -195,8 +198,8 @@ private fun ProfileHeader(
         if (profile.isMe) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onEditProfile, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.action_edit_profile)) }
-                OutlinedButton(onClick = { onEvent(ProfileEvent.Logout) }, enabled = !state.isLoggingOut, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.action_log_out))
+                OutlinedButton(onClick = onSettingsClick, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.settings_title))
                 }
             }
         }

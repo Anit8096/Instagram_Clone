@@ -12,6 +12,9 @@ interface AuthRepository {
 
     /** Always ends signed out locally, even if the server can't be reached. */
     suspend fun logout()
+
+    /** Permanently deletes the account after re-authentication; on success the device is signed out and wiped. */
+    suspend fun deleteAccount(password: String?, googleIdToken: String?): ApiResult<Unit>
 }
 
 /** Wipes per-account local data (drafts, queued uploads) when the session ends. */
@@ -38,6 +41,17 @@ class DefaultAuthRepository(
 
     override suspend fun logout() {
         sessionStore.current()?.let { api.logout(RefreshRequest(it.refreshToken)) }
+        signOutLocally()
+    }
+
+    override suspend fun deleteAccount(password: String?, googleIdToken: String?): ApiResult<Unit> {
+        val result = api.deleteAccount(DeleteAccountRequest(password?.takeIf { it.isNotEmpty() }, googleIdToken))
+        // The server already revoked every session, so there's nothing to log out of remotely.
+        if (result is ApiResult.Success) signOutLocally()
+        return result
+    }
+
+    private suspend fun signOutLocally() {
         userData.clear()
         sessionStore.clear()
         api.clearCachedTokens()

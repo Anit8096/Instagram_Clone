@@ -30,4 +30,5 @@ sealed interface DetailRoute : NavKey {
     @Serializable data class Comments(val postId: String) : DetailRoute
     @Serializable data object Inbox : DetailRoute
     @Serializable data class Thread(val username: String) : DetailRoute
+    @Serializable data object Settings : DetailRoute
 }

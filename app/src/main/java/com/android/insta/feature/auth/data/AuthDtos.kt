@@ -17,6 +17,10 @@ data class GoogleLoginRequest(val idToken: String)
 @Serializable
 data class RefreshRequest(val refreshToken: String)
 
+/** Re-authentication for `DELETE /me`: the password, or a fresh Google ID token for Google-only accounts. */
+@Serializable
+data class DeleteAccountRequest(val password: String? = null, val googleIdToken: String? = null)
+
 @Serializable
 data class UserDto(
     val id: String,

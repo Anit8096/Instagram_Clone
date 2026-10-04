@@ -43,6 +43,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -184,8 +187,13 @@ private fun ActivityRow(item: ActivityItem, onClick: () -> Unit, onActorClick: (
     val time = remember(item.createdAt) {
         DateUtils.getRelativeTimeSpanString(item.createdAt.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE).toString()
     }
+    val openProfile = stringResource(R.string.cd_open_profile, item.actorUsername)
     ListItem(
-        leadingContent = { Box(Modifier.clickable(onClick = onActorClick)) { Avatar(item.actorAvatarUrl, AvatarSmall) } },
+        leadingContent = {
+            Box(Modifier.clickable(role = Role.Button, onClick = onActorClick).semantics { contentDescription = openProfile }) {
+                Avatar(item.actorAvatarUrl, AvatarSmall)
+            }
+        },
         headlineContent = { Text(text, maxLines = 3) },
         supportingContent = { Text(time) },
         trailingContent = item.postThumbUrl?.let { url ->

@@ -18,7 +18,7 @@ Versions were checked against Google Maven, Maven Central, and the Gradle Plugin
 | M5 Likes, comments, offline action queue | Done | 40 server tests, 74 app unit tests; journeys `m5-engagement.xml` + `m5-offline-queue.xml` passed |
 | M6 Real-time DMs | Done | 42 server tests, 77 app unit tests; journey `m6-dm.xml` passed |
 | M7 Notifications + FCM | Done | 44 server tests, 84 app unit tests; journey `m7-notifications.xml` passed (FCM delivery itself needs a Firebase project; see `docs/running-the-app.md`) |
-| M8 | Not started | |
+| M8 Account deletion, hardening, showcase | Done | 47 server tests, 88 app unit tests, 3 instrumented; journey `m8-account.xml` passed; CI workflow + README |
 
 Changes from this plan made during M2:
 - Kotlin 2.4.20 is applied by putting `kotlin-gradle-plugin` on the root buildscript classpath (AGP 9 built-in Kotlin, per the AGP 9.0 release notes).
@@ -258,3 +258,11 @@ Changes made during M7:
 - Chat deep links use the peer's username (`insta://chat/{username}`) because threads are opened by username. Also `insta://activity`. A chat link builds Home › Inbox › Thread and replaces an already open thread.
 - Extra endpoints: `GET /notifications/unread-count`, `DELETE /me/devices/{token}`. Socket events: `notification.new` (with the unread count) and `badge`.
 - POST_NOTIFICATIONS is asked from a dismissible card on the Activity tab, not at startup.
+
+Changes made during M8:
+- `DELETE /me` takes `{password}` or, for Google-only accounts, a fresh `{googleIdToken}` for the same Google account. A failed re-auth is **403** `REAUTH_FAILED`, not 401, so clients don't mistake it for an expired token. Likes and comments on other people's posts are subtracted from their counters in the same transaction; media files are deleted after the commit; refresh tokens cascade, so every session dies.
+- Logout moved from the profile into a new Settings screen (Log out, Delete account), opened from the profile's "Settings" button.
+- Seed data is a Kotlin `main` (`server/.../seed/Seed.kt`) that goes through the real services and is idempotent: run it with `docker compose exec server java -cp "/app/lib/*" com.android.insta.server.seed.SeedKt` or `./gradlew seed`. Covered by `DemoSeederTest`.
+- CI runs the server tests (Testcontainers on the hosted runner) and Android `lintDebug testDebugUnitTest assembleDebug`. No dummy `google-services.json` is needed, because the google-services plugin is only applied when the file exists.
+- ktlint/detekt were **not** added: introducing them now would mean reformatting the whole codebase for little value. Android lint stays the static-analysis gate.
+- Accessibility: badge state on the Activity tab (M7), a labelled profile shortcut on Activity rows, and a check at 130 % font scale and in dark theme (the theme already followed the system setting with dynamic colour).

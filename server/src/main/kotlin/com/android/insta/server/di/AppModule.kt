@@ -23,6 +23,7 @@ import com.android.insta.server.notifications.NoopPushSender
 import com.android.insta.server.notifications.NotificationService
 import com.android.insta.server.notifications.PushSender
 import com.android.insta.server.social.SocialService
+import com.android.insta.server.users.AccountService
 import com.android.insta.server.users.ProfileService
 import com.android.insta.server.users.UserRepository
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -51,6 +52,7 @@ fun appModule(config: AppConfig, database: Database) = module {
     single { PostRepository(get()) }
     single { PostService(get(), get(), get(), get(), get()) }
     single { ProfileService(get(), get(), get(), get(), get()) }
+    single { AccountService(get(), get(), get(), get(), get()) }
     single { SocialService(get(), get(), get(), get()) }
     single { EngagementService(get(), get(), get()) }
     single { ConnectionRegistry() }

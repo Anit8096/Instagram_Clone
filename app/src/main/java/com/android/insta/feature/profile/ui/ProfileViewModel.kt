@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.android.insta.core.network.ApiResult
 import com.android.insta.core.ui.UiMessage
 import com.android.insta.core.ui.toUiMessage
-import com.android.insta.feature.auth.data.AuthRepository
 import com.android.insta.feature.post.data.Post
 import com.android.insta.feature.post.data.PostRepository
 import com.android.insta.feature.profile.data.Profile
@@ -27,7 +26,6 @@ data class ProfileUiState(
     val isLoadingMore: Boolean = false,
     val error: UiMessage? = null,
     val loadMoreError: UiMessage? = null,
-    val isLoggingOut: Boolean = false,
 ) {
     val canLoadMore: Boolean get() = nextCursor != null && !isLoadingMore && loadMoreError == null
 }
@@ -35,16 +33,14 @@ data class ProfileUiState(
 sealed interface ProfileEvent {
     data object Refresh : ProfileEvent
     data object LoadMore : ProfileEvent
-    data object Logout : ProfileEvent
     data object ToggleFollow : ProfileEvent
 }
 
-/** Profile header + post grid for any user ([username]); the own profile also offers logout. */
+/** Profile header + post grid for any user ([username]). Sign-out and account deletion live in Settings. */
 class ProfileViewModel(
     private val username: String,
     private val profiles: ProfileRepository,
     posts: PostRepository,
-    private val authRepository: AuthRepository,
     private val social: SocialRepository,
 ) : ViewModel() {
 
@@ -64,7 +60,6 @@ class ProfileViewModel(
         when (event) {
             ProfileEvent.Refresh -> refresh()
             ProfileEvent.LoadMore -> loadMore()
-            ProfileEvent.Logout -> logout()
             ProfileEvent.ToggleFollow -> toggleFollow()
         }
     }
@@ -125,11 +120,5 @@ class ProfileViewModel(
                 is ApiResult.Failure -> _state.update { it.copy(profile = profile, error = result.error.toUiMessage()) }
             }
         }
-    }
-
-    private fun logout() {
-        if (_state.value.isLoggingOut) return
-        _state.update { it.copy(isLoggingOut = true) }
-        viewModelScope.launch { authRepository.logout() }
     }
 }

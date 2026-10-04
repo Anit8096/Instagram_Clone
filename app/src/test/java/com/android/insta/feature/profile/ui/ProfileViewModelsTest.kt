@@ -9,7 +9,6 @@ import com.android.insta.core.session.Session
 import com.android.insta.core.session.SessionManager
 import com.android.insta.core.ui.UiMessage
 import com.android.insta.feature.profile.data.PostPage
-import com.android.insta.testutil.FakeAuthRepository
 import com.android.insta.testutil.FakePostRepository
 import com.android.insta.testutil.FakeProfileRepository
 import com.android.insta.testutil.FakeSocialRepository
@@ -32,11 +31,10 @@ class ProfileViewModelTest {
     @get:Rule val main = MainDispatcherRule()
     private val profiles = FakeProfileRepository()
     private val posts = FakePostRepository()
-    private val auth = FakeAuthRepository()
 
     private val social = FakeSocialRepository()
 
-    private fun viewModel(username: String = "jane.doe") = ProfileViewModel(username, profiles, posts, auth, social)
+    private fun viewModel(username: String = "jane.doe") = ProfileViewModel(username, profiles, posts, social)
 
     @Test
     fun `loads profile and first page`() {
@@ -108,13 +106,6 @@ class ProfileViewModelTest {
         assertEquals(false, viewModel.state.value.profile?.isFollowing)
         assertEquals(4L, viewModel.state.value.profile?.followerCount)
         assertEquals(UiMessage.Resource(R.string.error_network), viewModel.state.value.error)
-    }
-
-    @Test
-    fun `logout goes through the auth repository`() {
-        val viewModel = viewModel()
-        viewModel.onEvent(ProfileEvent.Logout)
-        assertEquals(listOf("logout"), auth.calls)
     }
 }
 

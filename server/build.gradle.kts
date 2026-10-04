@@ -71,6 +71,14 @@ dependencies {
     testImplementation(libs.testcontainers.postgresql)
 }
 
+// Demo data for local runs (same env vars as the server). In Docker: see Seed.kt.
+tasks.register<JavaExec>("seed") {
+    group = "application"
+    description = "Creates demo accounts, posts, follows, likes, comments and a conversation."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "com.android.insta.server.seed.SeedKt"
+}
+
 tasks.test {
     useJUnitPlatform()
     testLogging {

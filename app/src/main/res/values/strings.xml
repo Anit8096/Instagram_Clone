@@ -142,6 +142,17 @@
     <string name="channel_messages_description">New direct messages</string>
     <string name="channel_activity">Activity</string>
     <string name="channel_activity_description">Likes, comments and new followers</string>
+    <string name="cd_open_profile">Open %1$s\'s profile</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="action_delete_account">Delete account</string>
+    <string name="delete_account_summary">Permanently remove your profile, posts, comments, likes and messages</string>
+    <string name="delete_account_title">Delete your account?</string>
+    <string name="delete_account_body">This permanently deletes your profile, posts, comments, likes, follows and messages. It can\'t be undone. Enter your password to confirm.</string>
+    <string name="action_confirm_with_google">Confirm with Google instead</string>
+    <string name="error_reauth_failed">That didn\'t match. Check your password and try again.</string>
+
     <plurals name="cd_unread_activity">
         <item quantity="one">%1$d new notification</item>
         <item quantity="other">%1$d new notifications</item>
