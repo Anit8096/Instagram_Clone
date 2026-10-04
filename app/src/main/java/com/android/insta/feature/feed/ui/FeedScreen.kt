@@ -16,13 +16,18 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -187,15 +192,15 @@ internal fun CenteredMessage(message: String, action: String, onAction: () -> Un
     }
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FeedTopBar(onMessagesClick: () -> Unit) {
-    androidx.compose.material3.TopAppBar(
+    TopAppBar(
         title = { Text(stringResource(R.string.app_name)) },
         actions = {
-            androidx.compose.material3.IconButton(onClick = onMessagesClick) {
-                androidx.compose.material3.Icon(
-                    androidx.compose.material.icons.Icons.AutoMirrored.Filled.Send,
+            IconButton(onClick = onMessagesClick) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Send,
                     contentDescription = stringResource(R.string.messages_title),
                 )
             }

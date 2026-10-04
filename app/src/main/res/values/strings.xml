@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Insta</string>
+    <string name="app_name">Instagram</string>
 
     <!-- Auth -->
     <string name="login_subtitle">Sign in to see photos from people you follow.</string>
