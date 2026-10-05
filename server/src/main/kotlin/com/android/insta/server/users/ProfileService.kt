@@ -58,7 +58,7 @@ class ProfileService(
 
     suspend fun userIdFor(username: String): Uuid = users.findByUsername(username.trim().lowercase())?.id ?: throw notFound()
 
-    suspend fun update(userId: Uuid, request: UpdateProfileRequest): UserDto {
+    suspend fun update(userId: Uuid, request: UpdateProfileRequest): MeDto {
         val displayName = request.displayName?.trim()
         val bio = request.bio?.trim()
         val errors = buildMap {
@@ -92,7 +92,7 @@ class ProfileService(
             }
         }
         mediaService.deleteFiles(oldFiles)
-        return users.findById(userId)!!.toDto()
+        return users.findById(userId)!!.toMeDto()
     }
 
     private fun notFound() = ApiException(HttpStatusCode.NotFound, "NOT_FOUND", "User not found")

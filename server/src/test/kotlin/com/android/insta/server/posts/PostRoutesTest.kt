@@ -1,12 +1,12 @@
 package com.android.insta.server.posts
 
 import com.android.insta.server.auth.AuthResponse
-import com.android.insta.server.auth.RegisterRequest
 import com.android.insta.server.common.ErrorEnvelope
 import com.android.insta.server.common.Page
 import com.android.insta.server.media.MediaDto
 import com.android.insta.server.media.testImage
 import com.android.insta.server.support.IntegrationTest
+import com.android.insta.server.support.signUp
 import com.android.insta.server.users.ProfileDto
 import com.android.insta.server.users.UpdateProfileRequest
 import com.android.insta.server.users.UserDto
@@ -38,10 +38,7 @@ import kotlin.uuid.Uuid
 
 class PostRoutesTest : IntegrationTest() {
 
-    private suspend fun HttpClient.register(name: String): AuthResponse = post("/api/v1/auth/register") {
-        contentType(ContentType.Application.Json)
-        setBody(RegisterRequest(name, "$name@example.com", "correct-horse"))
-    }.body()
+    private suspend fun HttpClient.register(name: String): AuthResponse = signUp(name)
 
     private suspend fun HttpClient.upload(token: String, bytes: ByteArray = testImage(1600, 1200), kind: String = "post"): HttpResponse =
         submitFormWithBinaryData(

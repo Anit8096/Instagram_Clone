@@ -1,10 +1,10 @@
 package com.android.insta.server.chat
 
 import com.android.insta.server.auth.AuthResponse
-import com.android.insta.server.auth.RegisterRequest
 import com.android.insta.server.common.AppJson
 import com.android.insta.server.common.Page
 import com.android.insta.server.support.IntegrationTest
+import com.android.insta.server.support.signUp
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.WebSockets
@@ -27,10 +27,7 @@ import kotlin.uuid.Uuid
 
 class ChatRoutesTest : IntegrationTest() {
 
-    private suspend fun HttpClient.register(name: String): AuthResponse = post("/api/v1/auth/register") {
-        contentType(ContentType.Application.Json)
-        setBody(RegisterRequest(name, "$name@example.com", "correct-horse"))
-    }.body()
+    private suspend fun HttpClient.register(name: String): AuthResponse = signUp(name)
 
     private suspend fun HttpClient.open(token: String, username: String): ConversationDto = post("/api/v1/conversations") {
         bearerAuth(token); contentType(ContentType.Application.Json); setBody(OpenConversationRequest(username))

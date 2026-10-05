@@ -3,82 +3,182 @@ package com.android.insta.server.auth
 import com.android.insta.server.common.ErrorEnvelope
 import com.android.insta.server.support.FakeGoogleVerifier
 import com.android.insta.server.support.IntegrationTest
-import com.android.insta.server.users.UserDto
-import io.ktor.client.HttpClient
+import com.android.insta.server.support.json
+import com.android.insta.server.support.nextTestPhone
+import com.android.insta.server.support.signUp
+import com.android.insta.server.users.MeDto
+import com.android.insta.server.users.ProfileDto
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import org.junit.jupiter.api.Test
+import org.koin.dsl.module
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/**
+ * A clock tests can move forward (code expiry, resend cooldown). Starts at the real time because access tokens it
+ * signs are still checked against the real clock.
+ */
+class MutableClock(var now: Instant = Instant.now()) : Clock() {
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+    override fun withZone(zone: ZoneId): Clock = this
+    override fun instant(): Instant = now
+    fun advanceSeconds(seconds: Long) { now = now.plusSeconds(seconds) }
+}
 
 class AuthRoutesTest : IntegrationTest() {
 
-    private suspend fun HttpClient.postJson(path: String, body: Any): HttpResponse = post(path) {
-        contentType(ContentType.Application.Json)
-        setBody(body)
-    }
+    private suspend fun io.ktor.client.HttpClient.google(token: String) =
+        json("/api/v1/auth/google", GoogleLoginRequest(token)).body<GoogleAuthResult>()
 
-    private suspend fun HttpClient.register(
-        username: String = "jane.doe",
-        email: String = "jane@example.com",
-        password: String = "correct-horse",
-    ) = postJson("/api/v1/auth/register", RegisterRequest(username, email, password, "Jane"))
+    private suspend fun io.ktor.client.HttpClient.phoneOtp(phone: String) = json("/api/v1/auth/phone/otp", PhoneOtpRequest(phone))
 
     @Test
-    fun `register returns tokens and a usable access token`() = withApp { client ->
-        val response = client.register(username = "  Jane.Doe ")
-        assertEquals(HttpStatusCode.Created, response.status)
-        val auth = response.body<AuthResponse>()
-        assertEquals("jane.doe", auth.user.username)
-        assertTrue(auth.isNewUser)
+    fun `new google user onboards with a verified phone, then google and phone both sign in`() {
+        val google = FakeGoogleVerifier(mapOf("sam" to GoogleIdentity("google-sub-1", "sam.smith@gmail.com", emailVerified = true, name = "Sam Smith")))
+        withApp(google = google) { client ->
+            val onboarding = client.google("sam") as GoogleAuthResult.NeedsOnboarding
+            assertEquals("sam.smith", onboarding.suggestedUsername)
+            assertEquals("Sam Smith", onboarding.displayName)
 
-        val me = client.get("/api/v1/me") { bearerAuth(auth.accessToken) }
-        assertEquals(HttpStatusCode.OK, me.status)
-        assertEquals(auth.user.id, me.body<UserDto>().id)
+            val phone = "+91 98765 43210"
+            val challenge = client.json("/api/v1/auth/onboarding/otp", OnboardingOtpRequest(onboarding.onboardingToken, phone)).body<OtpChallengeDto>()
+            assertEquals("+91 ••••••3210", challenge.sentTo)
+            val created = client.json(
+                "/api/v1/auth/onboarding/complete",
+                CompleteOnboardingRequest(onboarding.onboardingToken, challenge.challengeId, challenge.devCode!!, " Sam.Smith ", "Sam"),
+            )
+            assertEquals(HttpStatusCode.Created, created.status)
+            val auth = created.body<AuthResponse>()
+            assertTrue(auth.isNewUser)
+            assertEquals("sam.smith" to "+919876543210", auth.user.username to auth.user.phone)
+            assertEquals("sam.smith@gmail.com", auth.user.email)
+
+            // The same Google account now signs straight in…
+            val again = client.google("sam") as GoogleAuthResult.SignedIn
+            assertEquals(auth.user.id, again.auth.user.id)
+            assertFalse(again.auth.isNewUser)
+
+            // …and so does the verified phone.
+            val login = client.phoneOtp("+919876543210").body<OtpChallengeDto>()
+            val viaPhone = client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(login.challengeId, login.devCode!!)).body<AuthResponse>()
+            assertEquals(auth.user.id, viaPhone.user.id)
+
+            // The phone is private: the account owner sees it, the public profile doesn't.
+            assertEquals("+919876543210", client.get("/api/v1/me") { bearerAuth(auth.accessToken) }.body<MeDto>().phone)
+            val publicJson = client.get("/api/v1/users/sam.smith") { bearerAuth(auth.accessToken) }
+            assertFalse("phone" in publicJson.body<String>())
+            assertEquals("sam.smith", publicJson.body<ProfileDto>().user.username)
+        }
     }
 
     @Test
-    fun `register rejects invalid fields with details`() = withApp { client ->
-        val response = client.postJson("/api/v1/auth/register", RegisterRequest("x", "nope", "short"))
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-        val error = response.body<ErrorEnvelope>().error
-        assertEquals("VALIDATION_ERROR", error.code)
-        assertEquals(setOf("username", "email", "password"), error.details?.keys)
+    fun `phone sign-in only works for linked numbers`() = withApp { client ->
+        val unknown = client.phoneOtp(nextTestPhone())
+        assertEquals(HttpStatusCode.NotFound, unknown.status)
+        assertEquals("NO_LINKED_ACCOUNT", unknown.body<ErrorEnvelope>().error.code)
+
+        val invalid = client.phoneOtp("12345")
+        assertEquals(HttpStatusCode.BadRequest, invalid.status)
+        assertEquals(setOf("phone"), invalid.body<ErrorEnvelope>().error.details?.keys)
     }
 
     @Test
-    fun `duplicate username and email are conflicts`() = withApp { client ->
-        client.register()
-        val sameName = client.register(email = "other@example.com")
+    fun `onboarding rejects taken phones and usernames and bad tokens`() = withApp { client ->
+        val phone = nextTestPhone()
+        client.signUp("jane", phone = phone)
+
+        val bob = client.google("google:bob") as GoogleAuthResult.NeedsOnboarding
+        val taken = client.json("/api/v1/auth/onboarding/otp", OnboardingOtpRequest(bob.onboardingToken, phone))
+        assertEquals("PHONE_IN_USE", taken.body<ErrorEnvelope>().error.code)
+
+        val challenge = client.json("/api/v1/auth/onboarding/otp", OnboardingOtpRequest(bob.onboardingToken, nextTestPhone())).body<OtpChallengeDto>()
+        val sameName = client.json("/api/v1/auth/onboarding/complete", CompleteOnboardingRequest(bob.onboardingToken, challenge.challengeId, challenge.devCode!!, "jane"))
         assertEquals(HttpStatusCode.Conflict, sameName.status)
         assertEquals("USERNAME_TAKEN", sameName.body<ErrorEnvelope>().error.code)
+        val badName = client.json("/api/v1/auth/onboarding/complete", CompleteOnboardingRequest(bob.onboardingToken, challenge.challengeId, challenge.devCode, "x!"))
+        assertEquals(setOf("username"), badName.body<ErrorEnvelope>().error.details?.keys)
 
-        val sameEmail = client.register(username = "someone.else", email = "JANE@example.com")
-        assertEquals(HttpStatusCode.Conflict, sameEmail.status)
-        assertEquals("EMAIL_TAKEN", sameEmail.body<ErrorEnvelope>().error.code)
+        val forged = client.json("/api/v1/auth/onboarding/otp", OnboardingOtpRequest("not-a-token", nextTestPhone()))
+        assertEquals("INVALID_ONBOARDING_TOKEN", forged.body<ErrorEnvelope>().error.code)
+
+        // An onboarding token is not an access token.
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/v1/me") { bearerAuth(bob.onboardingToken) }.status)
     }
 
     @Test
-    fun `login works with username or email and rejects wrong password`() = withApp { client ->
-        client.register()
-        assertEquals(HttpStatusCode.OK, client.postJson("/api/v1/auth/login", LoginRequest("jane.doe", "correct-horse")).status)
-        assertEquals(HttpStatusCode.OK, client.postJson("/api/v1/auth/login", LoginRequest("Jane@Example.com", "correct-horse")).status)
+    fun `codes are single use, limited in attempts, bound to their purpose, and expire`() {
+        val clock = MutableClock()
+        withApp(config = testConfig().copy(otp = realOtp), extraModules = listOf(module { single<Clock> { clock } })) { client ->
+            val phone = nextTestPhone()
+            val jane = client.signUp("jane", phone = phone)
 
-        val wrong = client.postJson("/api/v1/auth/login", LoginRequest("jane.doe", "wrong-password"))
-        assertEquals(HttpStatusCode.Unauthorized, wrong.status)
-        assertEquals("INVALID_CREDENTIALS", wrong.body<ErrorEnvelope>().error.code)
+            clock.advanceSeconds(60)
+            val first = client.phoneOtp(phone).body<OtpChallengeDto>()
+            val wrong = client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(first.challengeId, "000000".takeIf { it != first.devCode } ?: "111111"))
+            assertEquals("OTP_INVALID", wrong.body<ErrorEnvelope>().error.code)
+            assertEquals("4", wrong.body<ErrorEnvelope>().error.details?.get("attemptsLeft"))
+            assertEquals(HttpStatusCode.OK, client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(first.challengeId, first.devCode!!)).status)
+            assertEquals("OTP_USED", client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(first.challengeId, first.devCode)).body<ErrorEnvelope>().error.code)
 
-        val unknown = client.postJson("/api/v1/auth/login", LoginRequest("nobody", "correct-horse"))
-        assertEquals(HttpStatusCode.Unauthorized, unknown.status)
+            // Resend cooldown, then a fresh code that expires after 5 minutes.
+            val tooSoon = client.phoneOtp(phone)
+            assertEquals(HttpStatusCode.TooManyRequests, tooSoon.status)
+            assertEquals("OTP_RATE_LIMITED", tooSoon.body<ErrorEnvelope>().error.code)
+            clock.advanceSeconds(31)
+            val second = client.phoneOtp(phone).body<OtpChallengeDto>()
+            clock.advanceSeconds(301)
+            assertEquals("OTP_EXPIRED", client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(second.challengeId, second.devCode!!)).body<ErrorEnvelope>().error.code)
+
+            // Five wrong guesses kill a code, even if the sixth is right.
+            clock.advanceSeconds(31)
+            val third = client.phoneOtp(phone).body<OtpChallengeDto>()
+            val bad = if (third.devCode == "999999") "888888" else "999999"
+            repeat(5) { client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(third.challengeId, bad)) }
+            assertEquals("OTP_TOO_MANY_ATTEMPTS", client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(third.challengeId, third.devCode!!)).body<ErrorEnvelope>().error.code)
+
+            // A delete-account code can't sign anyone in.
+            clock.advanceSeconds(31)
+            val deleteCode = client.post("/api/v1/me/delete/otp") { bearerAuth(jane.accessToken) }.body<OtpChallengeDto>()
+            assertEquals("OTP_INVALID", client.json("/api/v1/auth/phone/verify", VerifyOtpRequest(deleteCode.challengeId, deleteCode.devCode!!)).body<ErrorEnvelope>().error.code)
+        }
+    }
+
+    @Test
+    fun `at most five codes per number per hour`() {
+        val clock = MutableClock()
+        withApp(config = testConfig().copy(otp = realOtp), extraModules = listOf(module { single<Clock> { clock } })) { client ->
+            val phone = nextTestPhone()
+            client.signUp("jane", phone = phone) // onboarding sent code #1 for this number
+            repeat(4) {
+                clock.advanceSeconds(31)
+                assertEquals(HttpStatusCode.OK, client.phoneOtp(phone).status)
+            }
+            clock.advanceSeconds(31)
+            assertEquals(HttpStatusCode.TooManyRequests, client.phoneOtp(phone).status)
+            clock.advanceSeconds(3600)
+            assertEquals(HttpStatusCode.OK, client.phoneOtp(phone).status)
+        }
+    }
+
+    @Test
+    fun `codes are only echoed in dev mode`() = withApp(config = testConfig().copy(otp = com.android.insta.server.config.OtpConfig(devEcho = false))) { client ->
+        val onboarding = client.google("google:jane") as GoogleAuthResult.NeedsOnboarding
+        val challenge = client.json("/api/v1/auth/onboarding/otp", OnboardingOtpRequest(onboarding.onboardingToken, nextTestPhone())).body<OtpChallengeDto>()
+        assertNull(challenge.devCode)
     }
 
     @Test
@@ -91,84 +191,48 @@ class AuthRoutesTest : IntegrationTest() {
 
     @Test
     fun `refresh rotates and reusing an old token revokes the whole session`() = withApp { client ->
-        val first = client.register().body<AuthResponse>()
+        val first = client.signUp("jane")
 
-        val second = client.postJson("/api/v1/auth/refresh", RefreshRequest(first.refreshToken))
+        val second = client.json("/api/v1/auth/refresh", RefreshRequest(first.refreshToken))
         assertEquals(HttpStatusCode.OK, second.status)
         val rotated = second.body<AuthResponse>()
         assertNotEquals(first.refreshToken, rotated.refreshToken)
 
         // Replaying the first token looks like theft: rejected, and its successor dies too.
-        val replay = client.postJson("/api/v1/auth/refresh", RefreshRequest(first.refreshToken))
-        assertEquals(HttpStatusCode.Unauthorized, replay.status)
-        val successor = client.postJson("/api/v1/auth/refresh", RefreshRequest(rotated.refreshToken))
+        assertEquals(HttpStatusCode.Unauthorized, client.json("/api/v1/auth/refresh", RefreshRequest(first.refreshToken)).status)
+        val successor = client.json("/api/v1/auth/refresh", RefreshRequest(rotated.refreshToken))
         assertEquals(HttpStatusCode.Unauthorized, successor.status)
         assertEquals("INVALID_REFRESH_TOKEN", successor.body<ErrorEnvelope>().error.code)
     }
 
     @Test
     fun `sessions are independent and logout revokes only its own`() = withApp { client ->
-        client.register()
-        val phone = client.postJson("/api/v1/auth/login", LoginRequest("jane.doe", "correct-horse")).body<AuthResponse>()
-        val tablet = client.postJson("/api/v1/auth/login", LoginRequest("jane.doe", "correct-horse")).body<AuthResponse>()
+        val phone = client.signUp("jane")
+        val tablet = (client.google("google:jane") as GoogleAuthResult.SignedIn).auth
 
-        assertEquals(HttpStatusCode.NoContent, client.postJson("/api/v1/auth/logout", RefreshRequest(phone.refreshToken)).status)
-        assertEquals(HttpStatusCode.Unauthorized, client.postJson("/api/v1/auth/refresh", RefreshRequest(phone.refreshToken)).status)
-        assertEquals(HttpStatusCode.OK, client.postJson("/api/v1/auth/refresh", RefreshRequest(tablet.refreshToken)).status)
+        assertEquals(HttpStatusCode.NoContent, client.json("/api/v1/auth/logout", RefreshRequest(phone.refreshToken)).status)
+        assertEquals(HttpStatusCode.Unauthorized, client.json("/api/v1/auth/refresh", RefreshRequest(phone.refreshToken)).status)
+        assertEquals(HttpStatusCode.OK, client.json("/api/v1/auth/refresh", RefreshRequest(tablet.refreshToken)).status)
     }
 
     @Test
-    fun `google sign-in creates, then returns, the same account`() {
-        val google = FakeGoogleVerifier(
-            mapOf("token-1" to GoogleIdentity("google-sub-1", "sam.smith@gmail.com", emailVerified = true, name = "Sam Smith")),
-        )
-        withApp(google = google) { client ->
-            val created = client.postJson("/api/v1/auth/google", GoogleLoginRequest("token-1")).body<AuthResponse>()
-            assertTrue(created.isNewUser)
-            assertEquals("sam.smith", created.user.username)
-            assertEquals("Sam Smith", created.user.displayName)
-
-            val again = client.postJson("/api/v1/auth/google", GoogleLoginRequest("token-1")).body<AuthResponse>()
-            assertFalse(again.isNewUser)
-            assertEquals(created.user.id, again.user.id)
-
-            val invalid = client.postJson("/api/v1/auth/google", GoogleLoginRequest("forged"))
-            assertEquals(HttpStatusCode.Unauthorized, invalid.status)
-        }
-    }
-
-    @Test
-    fun `google sign-in links to an existing account with the same verified email`() {
-        val google = FakeGoogleVerifier(
-            mapOf(
-                "verified" to GoogleIdentity("sub-a", "jane@example.com", emailVerified = true, name = "Jane"),
-                "unverified" to GoogleIdentity("sub-b", "jane@example.com", emailVerified = false, name = "Jane"),
-            ),
-        )
-        withApp(google = google) { client ->
-            val registered = client.register().body<AuthResponse>()
-
-            // Unverified email must not take over the existing account; it gets a fresh one.
-            val unverified = client.postJson("/api/v1/auth/google", GoogleLoginRequest("unverified")).body<AuthResponse>()
-            assertNotEquals(registered.user.id, unverified.user.id)
-
-            val linked = client.postJson("/api/v1/auth/google", GoogleLoginRequest("verified")).body<AuthResponse>()
-            assertEquals(registered.user.id, linked.user.id)
-            assertFalse(linked.isNewUser)
-        }
+    fun `password endpoints are gone and forged google tokens are rejected`() = withApp { client ->
+        assertEquals(HttpStatusCode.NotFound, client.json("/api/v1/auth/login", mapOf("login" to "x", "password" to "y")).status)
+        assertEquals(HttpStatusCode.NotFound, client.json("/api/v1/auth/register", mapOf("username" to "x")).status)
+        assertEquals(HttpStatusCode.Unauthorized, client.json("/api/v1/auth/google", GoogleLoginRequest("forged")).status)
     }
 
     @Test
     fun `auth endpoints are rate limited`() = withApp(config = testConfig(authRequestsPerMinute = 3)) { client ->
-        repeat(3) { client.postJson("/api/v1/auth/login", LoginRequest("nobody", "whatever-pass")) }
-        val limited = client.postJson("/api/v1/auth/login", LoginRequest("nobody", "whatever-pass"))
+        repeat(3) { client.phoneOtp(nextTestPhone()) }
+        val limited = client.phoneOtp(nextTestPhone())
         assertEquals(HttpStatusCode.TooManyRequests, limited.status)
         assertEquals("RATE_LIMITED", limited.body<ErrorEnvelope>().error.code)
     }
 
     @Test
     fun `malformed body is a 400 envelope`() = withApp { client ->
-        val response = client.post("/api/v1/auth/login") {
+        val response = client.post("/api/v1/auth/phone/otp") {
             contentType(ContentType.Application.Json)
             setBody("{not json")
         }

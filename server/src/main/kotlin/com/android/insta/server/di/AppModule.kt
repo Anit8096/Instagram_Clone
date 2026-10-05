@@ -1,10 +1,11 @@
 package com.android.insta.server.di
 
-import com.android.insta.server.auth.Argon2PasswordHasher
 import com.android.insta.server.auth.AuthService
 import com.android.insta.server.auth.GoogleTokenVerifier
 import com.android.insta.server.auth.JwksGoogleTokenVerifier
-import com.android.insta.server.auth.PasswordHasher
+import com.android.insta.server.auth.LogSmsSender
+import com.android.insta.server.auth.OtpService
+import com.android.insta.server.auth.SmsSender
 import com.android.insta.server.auth.RefreshTokenRepository
 import com.android.insta.server.auth.TokenService
 import com.android.insta.server.config.AppConfig
@@ -40,7 +41,9 @@ fun appModule(config: AppConfig, database: Database) = module {
     single { UserRepository(get()) }
     single { RefreshTokenRepository(get()) }
 
-    single<PasswordHasher> { Argon2PasswordHasher() }
+    // Codes are logged locally; a real SMS provider replaces this binding.
+    single<SmsSender> { LogSmsSender() }
+    single { OtpService(get(), get(), config.otp, config.jwt.secret, get()) }
     single { TokenService(config.jwt, get()) }
     single<GoogleTokenVerifier> { JwksGoogleTokenVerifier(config.google) }
     single { AuthService(get(), get(), get(), get(), get(), get()) }

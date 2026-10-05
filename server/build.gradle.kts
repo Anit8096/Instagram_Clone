@@ -53,7 +53,7 @@ dependencies {
     runtimeOnly(libs.flyway.postgresql)
     implementation(libs.hikari)
     runtimeOnly(libs.postgresql)
-    implementation(libs.password4j)
+    implementation(libs.libphonenumber)
     implementation(libs.thumbnailator)
     // FCM push (FcmPushSender); unused at runtime unless FIREBASE_CREDENTIALS_FILE is set.
     implementation(libs.firebase.admin)

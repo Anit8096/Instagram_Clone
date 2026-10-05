@@ -1,12 +1,12 @@
 package com.android.insta.server.posts
 
 import com.android.insta.server.auth.AuthResponse
-import com.android.insta.server.auth.RegisterRequest
 import com.android.insta.server.common.ErrorEnvelope
 import com.android.insta.server.common.Page
 import com.android.insta.server.media.MediaDto
 import com.android.insta.server.media.testImage
 import com.android.insta.server.support.IntegrationTest
+import com.android.insta.server.support.signUp
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
@@ -30,10 +30,7 @@ import kotlin.uuid.Uuid
 
 class EngagementRoutesTest : IntegrationTest() {
 
-    private suspend fun HttpClient.register(name: String): String = post("/api/v1/auth/register") {
-        contentType(ContentType.Application.Json)
-        setBody(RegisterRequest(name, "$name@example.com", "correct-horse"))
-    }.body<AuthResponse>().accessToken
+    private suspend fun HttpClient.register(name: String): String = signUp(name).accessToken
 
     private suspend fun HttpClient.newPost(token: String): String {
         val media = submitFormWithBinaryData("/api/v1/media", formData {

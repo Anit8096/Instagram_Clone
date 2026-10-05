@@ -1,7 +1,6 @@
 package com.android.insta.server.social
 
 import com.android.insta.server.auth.AuthResponse
-import com.android.insta.server.auth.RegisterRequest
 import com.android.insta.server.common.ErrorEnvelope
 import com.android.insta.server.common.Page
 import com.android.insta.server.media.MediaDto
@@ -9,6 +8,7 @@ import com.android.insta.server.media.testImage
 import com.android.insta.server.posts.CreatePostRequest
 import com.android.insta.server.posts.PostDto
 import com.android.insta.server.support.IntegrationTest
+import com.android.insta.server.support.signUp
 import com.android.insta.server.users.ProfileDto
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -33,10 +33,7 @@ import kotlin.uuid.Uuid
 
 class SocialRoutesTest : IntegrationTest() {
 
-    private suspend fun HttpClient.register(name: String, displayName: String? = null): String = post("/api/v1/auth/register") {
-        contentType(ContentType.Application.Json)
-        setBody(RegisterRequest(name, "$name@example.com", "correct-horse", displayName))
-    }.body<AuthResponse>().accessToken
+    private suspend fun HttpClient.register(name: String, displayName: String? = null): String = signUp(name, displayName.orEmpty()).accessToken
 
     private suspend fun HttpClient.post(token: String, caption: String): String {
         val media = submitFormWithBinaryData("/api/v1/media", formData {

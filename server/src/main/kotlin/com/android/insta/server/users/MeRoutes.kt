@@ -11,6 +11,10 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
+import io.ktor.server.routing.post
+import io.ktor.server.routing.put
+import com.android.insta.server.auth.PhoneOtpRequest
+import com.android.insta.server.auth.VerifyOtpRequest
 import org.koin.ktor.ext.inject
 
 /** Routes for the signed-in user and public profiles. Must be mounted inside `authenticate`. */
@@ -23,10 +27,19 @@ fun Route.meRoutes() {
     get("/me") {
         val user = users.findById(call.currentUserId())
             ?: throw ApiException(HttpStatusCode.Unauthorized, "UNAUTHORIZED", "Account no longer exists")
-        call.respond(user.toDto())
+        call.respond(user.toMeDto())
     }
     patch("/me") {
         call.respond(profiles.update(call.currentUserId(), call.receive<UpdateProfileRequest>()))
+    }
+    post("/me/phone/otp") {
+        call.respond(accounts.requestPhoneChange(call.currentUserId(), call.receive<PhoneOtpRequest>()))
+    }
+    put("/me/phone") {
+        call.respond(accounts.confirmPhoneChange(call.currentUserId(), call.receive<VerifyOtpRequest>()))
+    }
+    post("/me/delete/otp") {
+        call.respond(accounts.requestDeleteOtp(call.currentUserId()))
     }
     delete("/me") {
         accounts.delete(call.currentUserId(), call.receive<DeleteAccountRequest>())

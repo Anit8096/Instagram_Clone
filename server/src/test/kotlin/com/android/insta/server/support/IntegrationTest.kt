@@ -8,6 +8,7 @@ import com.android.insta.server.config.AppConfig
 import com.android.insta.server.config.DbConfig
 import com.android.insta.server.config.GoogleConfig
 import com.android.insta.server.config.JwtConfig
+import com.android.insta.server.config.OtpConfig
 import com.android.insta.server.config.RateLimitConfig
 import com.android.insta.server.module
 import io.ktor.client.HttpClient
@@ -43,10 +44,17 @@ object TestDatabase {
     }
 }
 
-/** Google verifier that accepts tokens of the form registered in [identities]. */
+/**
+ * Google verifier for tests: tokens registered in [identities], plus `google:<name>`, which is always a verified
+ * Google account (`sub-<name>`, `<name>@example.com`).
+ */
 class FakeGoogleVerifier(private val identities: Map<String, GoogleIdentity> = emptyMap()) : GoogleTokenVerifier {
     override suspend fun verify(idToken: String): GoogleIdentity =
-        identities[idToken] ?: throw ApiException(HttpStatusCode.Unauthorized, "INVALID_GOOGLE_TOKEN", "Google ID token is invalid")
+        identities[idToken]
+            ?: idToken.removePrefix("google:").takeIf { idToken.startsWith("google:") }?.let { name ->
+                GoogleIdentity("sub-$name", "$name@example.com", emailVerified = true, name = name.replaceFirstChar(Char::uppercase))
+            }
+            ?: throw ApiException(HttpStatusCode.Unauthorized, "INVALID_GOOGLE_TOKEN", "Google ID token is invalid")
 }
 
 abstract class IntegrationTest {
@@ -77,7 +85,14 @@ abstract class IntegrationTest {
         google = GoogleConfig(listOf("test-client-id")),
         rateLimit = RateLimitConfig(authRequestsPerMinute),
         mediaRoot = mediaRoot.toString(),
+        otp = relaxedOtp,
     )
+
+    /** Codes echoed and send throttling off, so tests can sign up and sign in back to back. */
+    protected val relaxedOtp = OtpConfig(devEcho = true, resendCooldown = kotlin.time.Duration.ZERO, maxPerHour = 1_000)
+
+    /** The production throttling (30 s cooldown, 5 per hour) with codes echoed, for tests of those limits. */
+    protected val realOtp = OtpConfig(devEcho = true)
 
     /** Fresh media directory per test class so file assertions don't see other tests' uploads. */
     protected val mediaRoot: java.nio.file.Path by lazy { java.nio.file.Files.createTempDirectory("insta-media") }

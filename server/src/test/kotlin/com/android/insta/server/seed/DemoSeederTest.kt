@@ -25,7 +25,7 @@ class DemoSeederTest : IntegrationTest() {
         val database = DatabaseFactory.connect(config.db)
         val koin = koinApplication { modules(appModule(config, database.exposed)) }.koin
         try {
-            val seeder = DemoSeeder(koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get())
+            val seeder = DemoSeeder(koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get())
             runBlocking { repeat(2) { seeder.seed() } } // second run must be a no-op
 
             transaction(database.exposed) {
@@ -35,6 +35,8 @@ class DemoSeederTest : IntegrationTest() {
                 assertEquals(3, Messages.selectAll().count())
                 assertEquals(24, Media.selectAll().count()) // 18 photos + 6 avatars
                 assertTrue(Users.selectAll().all { it[Users.avatarMediaId] != null })
+                // Demo users sign in by phone, so every seeded number must pass the same validation as the API.
+                Users.selectAll().forEach { assertEquals(it[Users.phone], com.android.insta.server.auth.PhoneNumbers.normalize(it[Users.phone])) }
                 assertTrue(Posts.selectAll().sumOf { it[Posts.likeCount] } > 0)
             }
         } finally {

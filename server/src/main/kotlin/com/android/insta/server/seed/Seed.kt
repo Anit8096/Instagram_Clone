@@ -1,7 +1,5 @@
 package com.android.insta.server.seed
 
-import com.android.insta.server.auth.AuthService
-import com.android.insta.server.auth.RegisterRequest
 import com.android.insta.server.chat.ChatService
 import com.android.insta.server.config.AppConfig
 import com.android.insta.server.db.DatabaseFactory
@@ -12,6 +10,7 @@ import com.android.insta.server.posts.CreatePostRequest
 import com.android.insta.server.posts.EngagementService
 import com.android.insta.server.posts.PostService
 import com.android.insta.server.social.SocialService
+import com.android.insta.server.users.NewUser
 import com.android.insta.server.users.ProfileService
 import com.android.insta.server.users.UpdateProfileRequest
 import com.android.insta.server.users.UserRepository
@@ -41,7 +40,7 @@ fun main() {
     val database = DatabaseFactory.connect(config.db) // runs Flyway, so a fresh database works too
     val koin = koinApplication { modules(appModule(config, database.exposed)) }.koin
     try {
-        runBlocking { DemoSeeder(koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).seed() }
+        runBlocking { DemoSeeder(koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get(), koin.get()).seed() }
     } finally {
         koin.close()
         database.close()
@@ -52,7 +51,6 @@ private data class DemoUser(val username: String, val name: String, val bio: Str
 
 class DemoSeeder(
     private val users: UserRepository,
-    private val auth: AuthService,
     private val profiles: ProfileService,
     private val media: MediaService,
     private val posts: PostService,
@@ -79,16 +77,17 @@ class DemoSeeder(
 
     suspend fun seed() {
         if (users.findByUsername(demo.first().username) != null) {
-            println("Demo data already present; nothing to do. Sign in as ${demo.first().username} / $PASSWORD")
+            println("Demo data already present; nothing to do. Sign in by phone with ${phoneFor(0)} (maya.travels)")
             return
         }
-        val ids = demo.associate { user ->
-            val response = auth.register(RegisterRequest(user.username, "${user.username}@example.com", PASSWORD, user.name))
-            val id = Uuid.parse(response.user.id)
+        val ids = demo.mapIndexed { index, user ->
+            // Accounts are normally created by Google sign-in + onboarding; demo users get a synthetic Google identity
+            // and a fictional number (555-01xx is reserved for fiction), and sign in by phone.
+            val id = users.create(NewUser(user.username, null, "seed:${user.username}", phoneFor(index), user.name)).id
             val avatar = media.upload(id, MediaKind.AVATAR, avatar(user))
             profiles.update(id, UpdateProfileRequest(bio = user.bio, avatarMediaId = avatar.id.toString()))
             user.username to id
-        }
+        }.toMap()
 
         val postIds = mutableListOf<Pair<Uuid, String>>() // post id to author username
         demo.forEach { user ->
@@ -127,7 +126,7 @@ class DemoSeeder(
             maya to "Deal. I'll bring photos from Lisbon",
         ).forEach { (sender, body) -> chat.send(sender, conversation, Uuid.random(), body) }
 
-        println("Seeded ${demo.size} demo accounts and ${postIds.size} posts. Sign in as maya.travels / $PASSWORD")
+        println("Seeded ${demo.size} demo accounts and ${postIds.size} posts. Sign in by phone: maya.travels is ${phoneFor(0)}")
     }
 
     private fun avatar(user: DemoUser): ByteArray = render(512, 512) { g, w, h ->
@@ -163,6 +162,7 @@ class DemoSeeder(
     }
 
     companion object {
-        const val PASSWORD = "demo-password"
+        /** Demo numbers in the US fictional range: +1 555-0101 … +1 555-0106 (area code 201). */
+        fun phoneFor(index: Int) = "+1201555%04d".format(101 + index)
     }
 }

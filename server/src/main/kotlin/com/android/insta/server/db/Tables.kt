@@ -10,8 +10,8 @@ object Users : Table("users") {
     val id = uuid("id")
     val username = varchar("username", 30)
     val email = varchar("email", 254).nullable()
-    val passwordHash = text("password_hash").nullable()
-    val googleSub = varchar("google_sub", 255).nullable()
+    val googleSub = varchar("google_sub", 255)
+    val phone = varchar("phone_e164", 16)
     val displayName = varchar("display_name", 60)
     val bio = varchar("bio", 150)
     val avatarMediaId = uuid("avatar_media_id").nullable()
@@ -118,6 +118,21 @@ object Notifications : Table("notifications") {
     val postId = uuid("post_id").nullable()
     val commentId = uuid("comment_id").nullable()
     val readAt = timestampWithTimeZone("read_at").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+object OtpChallenges : Table("otp_challenges") {
+    val id = uuid("id")
+    val phone = varchar("phone_e164", 16)
+    val purpose = varchar("purpose", 16)
+    val userId = uuid("user_id").nullable()
+    val onboardingSubject = varchar("onboarding_subject", 255).nullable()
+    val codeHash = varchar("code_hash", 64)
+    val attempts = integer("attempts")
+    val expiresAt = timestampWithTimeZone("expires_at")
+    val consumedAt = timestampWithTimeZone("consumed_at").nullable()
     val createdAt = timestampWithTimeZone("created_at")
 
     override val primaryKey = PrimaryKey(id)

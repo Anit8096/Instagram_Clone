@@ -4,91 +4,64 @@ import com.android.insta.server.common.ApiException
 import com.android.insta.server.users.NewUser
 import com.android.insta.server.users.UserRecord
 import com.android.insta.server.users.UserRepository
-import com.android.insta.server.users.toDto
+import com.android.insta.server.users.toMeDto
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.Clock
 import kotlin.random.Random
 import kotlin.uuid.Uuid
 
+/**
+ * Google-first authentication (docs/SPEC.md): accounts are created only through Google + onboarding with a verified
+ * phone; phone + OTP signs in to an existing account and never creates one.
+ */
 class AuthService(
     private val users: UserRepository,
     private val refreshTokens: RefreshTokenRepository,
-    private val hasher: PasswordHasher,
     private val tokens: TokenService,
     private val google: GoogleTokenVerifier,
+    private val otp: OtpService,
     private val clock: Clock,
 ) {
-    // Verified against when the login doesn't exist, so response time doesn't reveal valid usernames.
-    private val dummyHash by lazy { hasher.hash("timing-equalizer-password") }
-
-    suspend fun register(request: RegisterRequest): AuthResponse {
-        val valid = AuthValidation.validate(request)
-        if (users.usernameExists(valid.username)) throw usernameTaken()
-        if (users.findByEmail(valid.email) != null) {
-            throw ApiException(HttpStatusCode.Conflict, "EMAIL_TAKEN", "Email is already registered")
-        }
-        val hash = withContext(Dispatchers.Default) { hasher.hash(valid.password) }
-        val user = users.create(
-            NewUser(
-                username = valid.username,
-                email = valid.email,
-                passwordHash = hash,
-                googleSub = null,
-                displayName = valid.displayName.orEmpty(),
-            ),
+    suspend fun loginWithGoogle(request: GoogleLoginRequest): GoogleAuthResult {
+        val identity = google.verify(request.idToken)
+        users.findByGoogleSub(identity.subject)?.let { return GoogleAuthResult.SignedIn(issueTokens(it)) }
+        return GoogleAuthResult.NeedsOnboarding(
+            onboardingToken = tokens.createOnboardingToken(identity),
+            suggestedUsername = suggestUsername(identity.email?.substringBefore('@') ?: identity.name ?: "user"),
+            displayName = identity.name.orEmpty().take(AuthValidation.DISPLAY_NAME_MAX),
+            email = identity.email?.takeIf { identity.emailVerified },
         )
-        return issueTokens(user, isNewUser = true)
     }
 
-    suspend fun login(request: LoginRequest): AuthResponse {
-        val login = request.login.trim().lowercase()
-        val user = if ('@' in login) users.findByEmail(login) else users.findByUsername(login)
-        val hash = user?.passwordHash
-        val ok = withContext(Dispatchers.Default) {
-            if (hash == null) {
-                hasher.verify(request.password, dummyHash)
-                false
-            } else {
-                hasher.verify(request.password, hash)
-            }
-        }
-        if (!ok || user == null) {
-            throw ApiException(HttpStatusCode.Unauthorized, "INVALID_CREDENTIALS", "Incorrect username/email or password")
-        }
+    /** Only numbers linked to an account get a code; anything else is "no linked account" (spec decision). */
+    suspend fun requestPhoneLogin(request: PhoneOtpRequest): OtpChallengeDto {
+        val phone = PhoneNumbers.normalize(request.phone)
+        val user = users.findByPhone(phone) ?: throw noLinkedAccount()
+        return otp.request(phone, OtpPurpose.LOGIN, OtpOwner.User(user.id))
+    }
+
+    suspend fun verifyPhoneLogin(request: VerifyOtpRequest): AuthResponse {
+        val userId = loginChallengeOwner(request.challengeId)
+        otp.verify(request.challengeId, request.code, OtpPurpose.LOGIN, OtpOwner.User(userId))
+        val user = users.findById(userId) ?: throw noLinkedAccount()
         return issueTokens(user)
     }
 
-    /**
-     * Signs in with Google: an existing linked account, else links to an account with the same
-     * verified email, else creates a new password-less account with a generated username.
-     */
-    suspend fun loginWithGoogle(request: GoogleLoginRequest): AuthResponse {
-        val identity = google.verify(request.idToken)
-        users.findByGoogleSub(identity.subject)?.let { return issueTokens(it) }
+    suspend fun requestOnboardingOtp(request: OnboardingOtpRequest): OtpChallengeDto {
+        val identity = tokens.verifyOnboardingToken(request.onboardingToken)
+        val phone = PhoneNumbers.normalize(request.phone)
+        if (users.findByPhone(phone) != null) throw UserRepository.phoneInUse()
+        return otp.request(phone, OtpPurpose.ONBOARDING, OtpOwner.Onboarding(identity.subject))
+    }
 
-        val email = identity.email?.takeIf { identity.emailVerified }
-        if (email != null) {
-            val existing = users.findByEmail(email)
-            if (existing != null) {
-                if (existing.googleSub != null) {
-                    throw ApiException(HttpStatusCode.Conflict, "GOOGLE_ACCOUNT_LINKED", "Account is linked to a different Google account")
-                }
-                users.linkGoogle(existing.id, identity.subject)
-                return issueTokens(existing.copy(googleSub = identity.subject))
-            }
-        }
-
-        val user = users.create(
-            NewUser(
-                username = generateUsername(email ?: identity.name ?: "user"),
-                email = email,
-                passwordHash = null,
-                googleSub = identity.subject,
-                displayName = identity.name.orEmpty().take(AuthValidation.DISPLAY_NAME_MAX),
-            ),
-        )
+    /** Creates the account only after the phone code checks out; username and phone uniqueness are re-checked. */
+    suspend fun completeOnboarding(request: CompleteOnboardingRequest): AuthResponse {
+        val identity = tokens.verifyOnboardingToken(request.onboardingToken)
+        val (username, displayName) = AuthValidation.validateProfile(request.username, request.displayName)
+        users.findByGoogleSub(identity.subject)?.let { return issueTokens(it) } // double submit: already created
+        if (users.usernameExists(username)) throw UserRepository.usernameTaken()
+        val phone = otp.verify(request.challengeId, request.code, OtpPurpose.ONBOARDING, OtpOwner.Onboarding(identity.subject))
+        val user = users.create(NewUser(username, identity.email, identity.subject, phone, displayName.ifEmpty { identity.name.orEmpty().take(AuthValidation.DISPLAY_NAME_MAX) }))
         return issueTokens(user, isNewUser = true)
     }
 
@@ -109,13 +82,17 @@ class AuthService(
             accessToken = tokens.createAccessToken(user.id),
             refreshToken = newToken,
             expiresIn = tokens.accessTtlSeconds,
-            user = user.toDto(),
+            user = user.toMeDto(),
         )
     }
 
     suspend fun logout(request: RefreshRequest) {
         refreshTokens.revokeFamilyOf(TokenService.hashRefreshToken(request.refreshToken), clock.instant())
     }
+
+    /** The login challenge records its account; an unknown id fails the same way as a wrong code. */
+    private suspend fun loginChallengeOwner(challengeId: String): Uuid =
+        otp.ownerOf(challengeId) ?: throw ApiException(HttpStatusCode.BadRequest, "OTP_INVALID", "That code isn't right")
 
     private suspend fun issueTokens(user: UserRecord, isNewUser: Boolean = false): AuthResponse {
         val refreshToken = tokens.newRefreshToken()
@@ -129,13 +106,14 @@ class AuthService(
             accessToken = tokens.createAccessToken(user.id),
             refreshToken = refreshToken,
             expiresIn = tokens.accessTtlSeconds,
-            user = user.toDto(),
+            user = user.toMeDto(),
             isNewUser = isNewUser,
         )
     }
 
-    private suspend fun generateUsername(seed: String): String {
-        val base = seed.substringBefore('@').lowercase().filter { it.isLetterOrDigit() && it.code < 128 || it == '.' || it == '_' }
+    /** A free username from the seed; the user can change it on the onboarding screen. */
+    private suspend fun suggestUsername(seed: String): String {
+        val base = seed.lowercase().filter { (it.isLetterOrDigit() && it.code < 128) || it == '.' || it == '_' }
             .take(24)
             .padEnd(3, '_')
         if (!users.usernameExists(base)) return base
@@ -143,10 +121,11 @@ class AuthService(
             val candidate = "${base}_${Random.nextInt(1000, 10000)}"
             if (!users.usernameExists(candidate)) return candidate
         }
-        throw usernameTaken()
+        return "${base}_${Random.nextInt(10000, 100000)}"
     }
 
-    private fun usernameTaken() = ApiException(HttpStatusCode.Conflict, "USERNAME_TAKEN", "Username is already taken")
+    private fun noLinkedAccount() =
+        ApiException(HttpStatusCode.NotFound, "NO_LINKED_ACCOUNT", "No account is linked to this number. Sign in with Google to create one.")
 
     private fun invalidRefreshToken() =
         ApiException(HttpStatusCode.Unauthorized, "INVALID_REFRESH_TOKEN", "Refresh token is invalid or expired")

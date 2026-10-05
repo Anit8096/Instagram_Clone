@@ -15,14 +15,20 @@ fun Route.authRoutes() {
 
     route("/auth") {
         rateLimit(AUTH_RATE_LIMIT) {
-            post("/register") {
-                call.respond(HttpStatusCode.Created, auth.register(call.receive<RegisterRequest>()))
-            }
-            post("/login") {
-                call.respond(auth.login(call.receive<LoginRequest>()))
-            }
             post("/google") {
-                call.respond(auth.loginWithGoogle(call.receive<GoogleLoginRequest>()))
+                call.respond<GoogleAuthResult>(auth.loginWithGoogle(call.receive<GoogleLoginRequest>()))
+            }
+            post("/phone/otp") {
+                call.respond(auth.requestPhoneLogin(call.receive<PhoneOtpRequest>()))
+            }
+            post("/phone/verify") {
+                call.respond(auth.verifyPhoneLogin(call.receive<VerifyOtpRequest>()))
+            }
+            post("/onboarding/otp") {
+                call.respond(auth.requestOnboardingOtp(call.receive<OnboardingOtpRequest>()))
+            }
+            post("/onboarding/complete") {
+                call.respond(HttpStatusCode.Created, auth.completeOnboarding(call.receive<CompleteOnboardingRequest>()))
             }
             post("/refresh") {
                 call.respond(auth.refresh(call.receive<RefreshRequest>()))

@@ -53,33 +53,51 @@ class TokenServiceTest {
     }
 }
 
-class PasswordHasherTest {
-    private val hasher = Argon2PasswordHasher()
+class OnboardingTokenTest {
+    private val config = JwtConfig("unit-test-secret-that-is-long-enough!!", "insta", "insta-app", 15.minutes, 30.days)
+    private val identity = GoogleIdentity("sub-1", "sam@gmail.com", emailVerified = true, name = "Sam")
 
     @Test
-    fun `hash verifies only the original password`() {
-        val hash = hasher.hash("correct-horse")
-        assertTrue(hash.startsWith("\$argon2id\$"))
-        assertTrue(hasher.verify("correct-horse", hash))
-        assertFalse(hasher.verify("wrong-horse", hash))
-        assertFalse(hasher.verify("correct-horse", "garbage"))
+    fun `round-trips the google identity but never works as an access token`() {
+        val tokens = TokenService(config, Clock.systemUTC())
+        val token = tokens.createOnboardingToken(identity)
+        assertEquals(identity, tokens.verifyOnboardingToken(token))
+        assertFailsWith<JWTVerificationException> { tokens.verifier.verify(token) }
+        assertFailsWith<com.android.insta.server.common.ApiException> { tokens.verifyOnboardingToken(tokens.createAccessToken(Uuid.random())) }
+    }
+
+    @Test
+    fun `expires after 15 minutes and drops unverified emails`() {
+        val past = Clock.fixed(Instant.now().minusSeconds(16 * 60), ZoneOffset.UTC)
+        val old = TokenService(config, past).createOnboardingToken(identity)
+        assertFailsWith<com.android.insta.server.common.ApiException> { TokenService(config, Clock.systemUTC()).verifyOnboardingToken(old) }
+
+        val tokens = TokenService(config, Clock.systemUTC())
+        val unverified = tokens.verifyOnboardingToken(tokens.createOnboardingToken(identity.copy(emailVerified = false)))
+        assertEquals(null, unverified.email)
     }
 }
 
 class AuthValidationTest {
     @Test
-    fun `normalizes username and email`() {
-        val valid = AuthValidation.validate(RegisterRequest("  Jane.Doe ", " JANE@Example.COM ", "password1", " Jane "))
-        assertEquals("jane.doe", valid.username)
-        assertEquals("jane@example.com", valid.email)
-        assertEquals("Jane", valid.displayName)
+    fun `normalizes the profile and reports every invalid field`() {
+        assertEquals("jane.doe" to "Jane", AuthValidation.validateProfile("  Jane.Doe ", " Jane "))
+        val error = assertFailsWith<ValidationException> { AuthValidation.validateProfile("a!", "n".repeat(61)) }
+        assertEquals(setOf("username", "displayName"), error.details?.keys)
     }
 
     @Test
-    fun `reports every invalid field`() {
-        val error = assertFailsWith<ValidationException> {
-            AuthValidation.validate(RegisterRequest("a!", "x@", "short", "n".repeat(61)))
+    fun `phone numbers normalise to E164 and need a country code`() {
+        assertEquals("+919876543210", PhoneNumbers.normalize(" +91 98765-43210 "))
+        assertEquals("+12015550101", PhoneNumbers.normalize("+1 (201) 555-0101")) // demo seed range
+        listOf("9876543210", "+91 123", "+1 555", "hello").forEach { raw ->
+            assertTrue(assertFailsWith<ValidationException>(raw) { PhoneNumbers.normalize(raw) }.details!!.containsKey("phone"))
         }
-        assertEquals(setOf("username", "email", "password", "displayName"), error.details?.keys)
+    }
+
+    @Test
+    fun `masked numbers show only the country code and last four digits`() {
+        assertEquals("+91 ••••••3210", OtpService.mask("+919876543210"))
+        assertEquals("+1 ••••••0101", OtpService.mask("+12015550101"))
     }
 }

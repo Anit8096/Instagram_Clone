@@ -3,6 +3,7 @@ package com.android.insta.server.config
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 data class AppConfig(
     val port: Int,
@@ -14,6 +15,7 @@ data class AppConfig(
     val maxUploadBytes: Long = 10L * 1024 * 1024,
     /** Firebase service-account JSON; null = push disabled (NoopPushSender). */
     val firebaseCredentialsFile: String? = null,
+    val otp: OtpConfig = OtpConfig(),
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -48,6 +50,7 @@ data class AppConfig(
                 mediaRoot = get("MEDIA_ROOT", "/data/media"),
                 maxUploadBytes = get("MAX_UPLOAD_MB", "10").toLong() * 1024 * 1024,
                 firebaseCredentialsFile = get("FIREBASE_CREDENTIALS_FILE", "").ifBlank { null },
+                otp = OtpConfig(devEcho = get("OTP_DEV_ECHO", "false").toBoolean()),
             )
         }
     }
@@ -69,3 +72,15 @@ data class GoogleConfig(val clientIds: List<String>) {
 }
 
 data class RateLimitConfig(val authRequestsPerMinute: Int)
+
+/**
+ * One-time codes. [devEcho] returns the code in the API response, which is for local demos and tests only: anyone
+ * calling the API could then sign in as any number.
+ */
+data class OtpConfig(
+    val devEcho: Boolean = false,
+    val codeTtl: Duration = 5.minutes,
+    val maxAttempts: Int = 5,
+    val resendCooldown: Duration = 30.seconds,
+    val maxPerHour: Int = 5,
+)

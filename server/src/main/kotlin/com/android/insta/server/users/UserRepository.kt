@@ -15,12 +15,13 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.uuid.Uuid
 
+/** Every account has a Google identity and a verified phone (E.164); email is Google's, when it gave one. */
 data class UserRecord(
     val id: Uuid,
     val username: String,
     val email: String?,
-    val passwordHash: String?,
-    val googleSub: String?,
+    val googleSub: String,
+    val phone: String,
     val displayName: String,
     val bio: String,
     val avatarMediaId: Uuid?,
@@ -30,8 +31,8 @@ data class UserRecord(
 data class NewUser(
     val username: String,
     val email: String?,
-    val passwordHash: String?,
-    val googleSub: String?,
+    val googleSub: String,
+    val phone: String,
     val displayName: String,
 )
 
@@ -41,9 +42,9 @@ class UserRepository(private val db: Database) {
 
     suspend fun findByUsername(username: String): UserRecord? = findOne { Users.username eq username }
 
-    suspend fun findByEmail(email: String): UserRecord? = findOne { Users.email eq email }
-
     suspend fun findByGoogleSub(sub: String): UserRecord? = findOne { Users.googleSub eq sub }
+
+    suspend fun findByPhone(phone: String): UserRecord? = findOne { Users.phone eq phone }
 
     suspend fun usernameExists(username: String): Boolean = findByUsername(username) != null
 
@@ -57,8 +58,8 @@ class UserRepository(private val db: Database) {
                     it[Users.id] = id
                     it[username] = user.username
                     it[email] = user.email
-                    it[passwordHash] = user.passwordHash
                     it[googleSub] = user.googleSub
+                    it[phone] = user.phone
                     it[displayName] = user.displayName
                     it[bio] = ""
                     it[createdAt] = now
@@ -67,12 +68,14 @@ class UserRepository(private val db: Database) {
         } catch (e: ExposedSQLException) {
             throw uniqueViolationToApi(e) ?: e
         }
-        return UserRecord(id, user.username, user.email, user.passwordHash, user.googleSub, user.displayName, "", null, now)
+        return UserRecord(id, user.username, user.email, user.googleSub, user.phone, user.displayName, "", null, now)
     }
 
-    suspend fun linkGoogle(userId: Uuid, sub: String) {
-        suspendTransaction(db) {
-            Users.update({ Users.id eq userId }) { it[googleSub] = sub }
+    suspend fun updatePhone(userId: Uuid, phone: String) {
+        try {
+            suspendTransaction(db) { Users.update({ Users.id eq userId }) { it[Users.phone] = phone } }
+        } catch (e: ExposedSQLException) {
+            throw uniqueViolationToApi(e) ?: e
         }
     }
 
@@ -85,8 +88,8 @@ class UserRepository(private val db: Database) {
         id = this[Users.id],
         username = this[Users.username],
         email = this[Users.email],
-        passwordHash = this[Users.passwordHash],
         googleSub = this[Users.googleSub],
+        phone = this[Users.phone],
         displayName = this[Users.displayName],
         bio = this[Users.bio],
         avatarMediaId = this[Users.avatarMediaId],
@@ -97,10 +100,16 @@ class UserRepository(private val db: Database) {
         if (e.sqlState != "23505") return null
         val text = e.cause?.message.orEmpty()
         return when {
-            "users_username_key" in text -> ApiException(HttpStatusCode.Conflict, "USERNAME_TAKEN", "Username is already taken")
-            "users_email_key" in text -> ApiException(HttpStatusCode.Conflict, "EMAIL_TAKEN", "Email is already registered")
+            "users_username_key" in text -> usernameTaken()
+            "users_phone_e164_key" in text -> phoneInUse()
             "users_google_sub_key" in text -> ApiException(HttpStatusCode.Conflict, "GOOGLE_ACCOUNT_LINKED", "Google account is already linked")
+            "users_email_key" in text -> ApiException(HttpStatusCode.Conflict, "EMAIL_TAKEN", "This Google email is already linked to another account")
             else -> null
         }
+    }
+
+    companion object {
+        fun usernameTaken() = ApiException(HttpStatusCode.Conflict, "USERNAME_TAKEN", "Username is already taken")
+        fun phoneInUse() = ApiException(HttpStatusCode.Conflict, "PHONE_IN_USE", "This number is already linked to another account")
     }
 }
