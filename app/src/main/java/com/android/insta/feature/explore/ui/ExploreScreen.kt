@@ -74,7 +74,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
-data class SearchState(val loading: Boolean = false, val results: List<UserSummary> = emptyList(), val error: UiMessage? = null)
+data class SearchState(
+    val loading: Boolean = false,
+    val results: List<UserSummary> = emptyList(),
+    val error: UiMessage? = null
+)
 
 @OptIn(FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ExploreViewModel(private val social: SocialRepository) : ViewModel() {
