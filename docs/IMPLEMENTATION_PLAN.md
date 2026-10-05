@@ -19,6 +19,8 @@ Versions were checked against Google Maven, Maven Central, and the Gradle Plugin
 | M6 Real-time DMs | Done | 42 server tests, 77 app unit tests; journey `m6-dm.xml` passed |
 | M7 Notifications + FCM | Done | 44 server tests, 84 app unit tests; journey `m7-notifications.xml` passed (FCM delivery itself needs a Firebase project; see `docs/running-the-app.md`) |
 | M8 Account deletion, hardening, showcase | Done | 47 server tests, 88 app unit tests, 3 instrumented; journey `m8-account.xml` passed; CI workflow + README |
+| M9 Server: Google-first + phone OTP auth | Planned | Spec: `docs/SPEC.md` (approved 2026-10-05) |
+| M10 App: Welcome, phone sign-in, onboarding, OTP flows | Planned | |
 
 Changes from this plan made during M2:
 - Kotlin 2.4.20 is applied by putting `kotlin-gradle-plugin` on the root buildscript classpath (AGP 9 built-in Kotlin, per the AGP 9.0 release notes).
@@ -74,7 +76,9 @@ kotlinx-serialization 1.11.0 needs stdlib ≥ 2.3.20. Bump everything together.
 | Testcontainers | `testcontainers-bom` → **`testcontainers-postgresql`** (renamed in 2.x) | 2.0.5 |
 | Firebase Admin | `com.google.firebase:firebase-admin` | 9.11.0 |
 | Images (server) | `net.coobird:thumbnailator` + `com.twelvemonkeys.imageio:imageio-jpeg` | 0.4.21 / 3.15.2 |
-| Password hashing | `com.password4j:password4j` (Argon2id, pure Java) | 1.8.4 |
+| Password hashing | `com.password4j:password4j` (Argon2id, pure Java) | 1.8.4 — **removed in M9** |
+| Phone numbers (server, M9) | `com.googlecode.libphonenumber:libphonenumber` | 9.0.40 (checked 2026-10-05) |
+| Phone numbers (app, M10) | `io.michaelrocks:libphonenumber-android` | 9.0.40 (checked 2026-10-05) |
 | Logging | `logback-classic` / `timber` | 1.6.5 / 5.0.1 |
 | Testing | `app.cash.turbine:turbine` | 1.2.1 |
 
@@ -214,6 +218,63 @@ Each milestone ends **demoable and tested**. Server work comes before the matchi
 - README: architecture diagram, offline-queue explainer, `docker compose up` quickstart, Firebase
   setup steps, screenshots/GIF.
 
+### M9 — Server: Google-first sign-in + phone OTP (spec: `docs/SPEC.md`)
+Demoable at the end through Swagger / curl with `OTP_DEV_ECHO=true`; the app is untouched until M10 (it can't sign
+in with passwords any more in between, so M9 and M10 merge together).
+- **Migration `V4__phone_auth.sql`:** delete users without a phone (all existing local users; cascades their data),
+  add `phone_e164 VARCHAR(16) NOT NULL UNIQUE`, drop `password_hash` and the old password-or-Google check, make
+  `google_sub NOT NULL`. New table `otp_challenges` (id, phone_e164, purpose `login|onboarding|change_phone|delete_account`,
+  user_id nullable FK cascade, onboarding_subject nullable, code_hash, attempts, expires_at, consumed_at, created_at;
+  index `(phone_e164, created_at DESC)`).
+- **`auth/Phone.kt`:** `PhoneNumbers.normalize(raw)` → E.164 or `ValidationException("phone", …)` via libphonenumber
+  (`isValidNumber`).
+- **`auth/Otp.kt`:** `OtpService(db, sms, config, clock)` with `request(phone, purpose, userId?, subject?)` and
+  `verify(challengeId, code, purpose, userId?/subject?)`. HMAC-SHA256 hash keyed by the JWT secret, constant-time
+  compare, 5-minute expiry, 5 attempts, single use, 30 s cooldown and 5 per hour per number (`429 OTP_RATE_LIMITED`
+  with `retryAfter`). `SmsSender` interface + `LogSmsSender`; `OtpConfig(devEcho, …)` from env (`OTP_DEV_ECHO`).
+- **Onboarding token:** `TokenService` issues a 15-minute JWT of type `onboarding` with Google `sub`, email and name;
+  only the onboarding endpoints accept it.
+- **Endpoints** (under the existing auth rate limit):
+  - `POST /auth/google {idToken}` → `{type:"signed_in", auth}` for a linked account, else
+    `{type:"needs_onboarding", onboardingToken, suggestedUsername, displayName}`. The old email-linking branch goes.
+  - `POST /auth/phone/otp {phone}` → `404 NO_LINKED_ACCOUNT` for unknown numbers, else `{challengeId, expiresIn, resendIn, devCode?}`.
+  - `POST /auth/phone/verify {challengeId, code}` → `AuthResponse`.
+  - `POST /auth/onboarding/otp {onboardingToken, phone}` → `409 PHONE_IN_USE` if taken, else a challenge.
+  - `POST /auth/onboarding/complete {onboardingToken, challengeId, code, username, displayName}` → creates the user
+    (Google sub + verified phone) → `AuthResponse(isNewUser = true)`; `409 USERNAME_TAKEN` / `PHONE_IN_USE` re-checked.
+  - `POST /me/phone/otp {phone}` + `PUT /me/phone {challengeId, code}` (change phone; OTP to the new number).
+  - `POST /me/delete/otp` + `DELETE /me {challengeId, code}` or `{googleIdToken}` (replaces the password variant).
+- **Privacy:** new `MeDto` (UserDto + `phone`) for `/me` and auth responses only; `UserDto` (public) unchanged.
+- **Removed:** `/auth/register`, `/auth/login`, `PasswordHasher`/Argon2, `password4j`, password validation.
+- **Seeder:** demo users get `google_sub = "seed:<username>"` and `+1 555-0101`…`0106`, created through `UserRepository`.
+- **Tests:** `IntegrationTest.signUp(name)` helper (fake Google → onboarding OTP with dev echo → complete) replaces
+  every test's `register` helper. New: `OtpServiceTest` (hash, expiry, attempts, single use, cooldown, hourly cap,
+  purpose binding), `PhoneAuthRoutesTest` (no linked account, sign-in, wrong/expired/reused code),
+  `OnboardingRoutesTest` (needs-onboarding, phone in use, username taken, token type/expiry, then Google signs in),
+  `ChangePhoneTest`, `AccountDeletionTest` updated for OTP. OpenAPI, `.env.example` (`OTP_DEV_ECHO=true` for local), docs.
+
+### M10 — App: Welcome, phone sign-in, onboarding, OTP flows
+- **Dependency:** `libphonenumber-android` for validation, formatting and the country list.
+- **Auth navigation** (`AuthRoute`): `Welcome` (primary **Continue with Google**, secondary **Sign in with phone**),
+  `PhoneSignIn`, `OtpEntry(purpose, phone, challengeId)`, `Onboarding(onboardingToken, suggestedUsername, displayName)`.
+  Login/Register screens, their ViewModels and tests are deleted.
+- **Shared UI:** `PhoneNumberField` (country picker in a searchable M3 bottom sheet: flag, name, dial code; default
+  from the device region; formats as you type) and `OtpCodeField` (6 digits, one-time-code autofill hint, resend
+  countdown) under `core/ui`, reused by sign-in, onboarding, change phone and delete account.
+- **Data:** `AuthRepository` gets `signInWithGoogle` (→ SignedIn | NeedsOnboarding), `requestLoginOtp`
+  (→ challenge | NoLinkedAccount), `verifyLoginOtp`, `requestOnboardingOtp`, `completeOnboarding`; the session store
+  saves the user's own phone. `ProfileRepository` gets change phone; `deleteAccount` takes a challenge + code or a
+  Google token.
+- **Screens:** `WelcomeViewModel`, `PhoneSignInViewModel`, `OtpViewModel`, `OnboardingViewModel` (UDF like the rest);
+  "No linked account" shows a message with a **Continue with Google** action. Edit profile gets a **Phone** row →
+  change-phone sheet. Settings → Delete account becomes "Send code" + OTP, with the Google option kept.
+- **Without Google OAuth configured** the Welcome screen still shows phone sign-in (seeded accounts work) and explains
+  that creating an account needs Google.
+- **Tests:** ViewModel and repository unit tests for every new flow (phone validation, cooldown countdown, error
+  mapping for `NO_LINKED_ACCOUNT` / `PHONE_IN_USE` / `USERNAME_TAKEN` / `OTP_*`), phone utility tests; the old
+  login/register tests are removed. Journeys: seeded phone sign-in, unknown number, change phone, delete with OTP,
+  and Google onboarding (runs once the OAuth client IDs exist).
+
 ---
 
 ## Secrets & setup checklist (you)
@@ -223,6 +284,11 @@ Each milestone ends **demoable and tested**. Server work comes before the matchi
   the server container (gitignored; path in `.env`).
 - `.env` from `.env.example` (JWT secret ≥ 256-bit, DB password).
 - Recommend `git init` before M1, with a `.gitignore` covering the secrets above.
+- **M9/M10:** the Google OAuth client IDs above are now **required to create accounts** on a device (debug SHA-1:
+  `29:3E:29:C3:0F:DA:26:AD:89:B5:EC:D4:5C:9D:44:3B:81:B5:BC:70`). `OTP_DEV_ECHO=true` in `.env` for local demos only.
+  A real SMS provider (e.g. Twilio) is optional and later.
+- **M9:** existing local accounts are deleted by the V4 migration; run the seeder again afterwards. Old uploaded files
+  stay in the media volume until `docker volume rm insta_media` (optional).
 
 ## Verification (end of each milestone)
 1. `docker compose up --build` → `GET /health` OK, Swagger at `http://localhost:8080/docs`.
@@ -235,6 +301,9 @@ Each milestone ends **demoable and tested**. Server work comes before the matchi
 - Room 3 vs Room 2 (default: Room 3).
 - Explore "popular" window (default 7 days).
 - Whether to add a KMP shared-DTO module later (currently duplicated DTOs).
+- M9/M10 OTP parameters (defaults: 6 digits, 5 min expiry, 5 attempts, 30 s cooldown, 5 codes/hour/number).
+- M9/M10 SMS provider (default: log only; Twilio later behind `SmsSender`).
+- M9/M10 SMS Retriever auto-fill (default: not now; only with a real provider).
 
 Changes made during M5:
 - The offline action queue covers likes/unlikes and comments; follows stay direct and optimistic (revert on failure). DMs join the queue in M6.
