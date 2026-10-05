@@ -1,37 +1,61 @@
 <resources>
     <string name="app_name">Instagram</string>
 
-    <!-- Auth -->
-    <string name="login_subtitle">Sign in to see photos from people you follow.</string>
-    <string name="register_subtitle">Create an account to start sharing.</string>
-    <string name="login_no_account">Don\'t have an account?</string>
-    <string name="register_have_account">Already have an account?</string>
-    <string name="field_login">Username or email</string>
+    <!-- Auth: Google first, phone + code for existing accounts -->
+    <string name="welcome_subtitle">Share photos with the people you follow.</string>
+    <string name="welcome_phone_hint">Already have an account? You can sign in with the phone number linked to it.</string>
+    <string name="welcome_google_not_configured">Creating an account needs Google sign-in, which isn\'t set up in this build. Existing accounts can sign in by phone.</string>
+    <string name="phone_sign_in_subtitle">Sign in with the phone number linked to your account.</string>
+    <string name="phone_sign_in_hint">New here? Accounts are created with Google sign-in.</string>
+    <string name="onboarding_subtitle">Almost done. Pick a username and verify your phone number.</string>
     <string name="field_username">Username</string>
     <string name="field_username_hint">Lowercase letters, numbers, \'.\' and \'_\'</string>
-    <string name="field_email">Email</string>
     <string name="field_display_name">Name (optional)</string>
-    <string name="field_password">Password</string>
-    <string name="action_log_in">Log in</string>
-    <string name="action_sign_up">Sign up</string>
-    <string name="action_create_account">Create account</string>
+    <string name="field_phone">Phone number</string>
+    <string name="field_otp_code">6-digit code</string>
+    <string name="search_country">Search country or code</string>
+    <string name="cd_country_code">Country: %1$s, +%2$d. Change country</string>
+    <string name="otp_sent_to">Enter the code we sent to %1$s.</string>
+    <string name="otp_resend">Resend code</string>
+    <string name="otp_resend_in">Resend code in %1$d:%2$02d</string>
+    <string name="otp_dev_code">Dev build: the code is %1$s</string>
     <string name="action_continue_with_google">Continue with Google</string>
-    <string name="action_show">Show</string>
-    <string name="action_hide">Hide</string>
+    <string name="action_sign_in_with_phone">Sign in with phone</string>
+    <string name="action_send_code">Send code</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_create_account">Create account</string>
+    <string name="action_use_different_number">Use a different number</string>
+    <string name="action_start_again">Start again with Google</string>
+    <string name="action_change">Change</string>
     <string name="action_log_out">Log out</string>
     <string name="action_retry">Retry</string>
+    <string name="phone_not_set">Not set</string>
+    <string name="change_phone_title">Phone number</string>
+    <string name="change_phone_current">Current number: %1$s</string>
+    <string name="change_phone_body">We\'ll send a code to your new number. After that, sign in by phone with the new number.</string>
 
     <!-- Validation and errors -->
-    <string name="error_required">Required</string>
     <string name="error_username_format">3–30 characters: lowercase letters, numbers, \'.\' or \'_\'</string>
-    <string name="error_email_format">Enter a valid email address</string>
-    <string name="error_password_length">Use 8 to 128 characters</string>
     <string name="error_display_name_length">At most 60 characters</string>
     <string name="error_username_taken">That username is taken</string>
-    <string name="error_email_taken">An account with this email already exists</string>
-    <string name="error_invalid_credentials">Incorrect username/email or password</string>
+    <string name="error_phone_invalid">Enter a valid phone number for the selected country</string>
+    <string name="error_no_linked_account">No account is linked to this number. Sign in with Google to create one.</string>
+    <string name="error_phone_in_use">This number is already linked to another account</string>
+    <string name="error_onboarding_expired">Your sign-up session expired. Start again with Google.</string>
+    <string name="error_otp_invalid">That code isn\'t right</string>
+    <plurals name="error_otp_invalid_attempts">
+        <item quantity="one">That code isn\'t right. %1$d try left.</item>
+        <item quantity="other">That code isn\'t right. %1$d tries left.</item>
+    </plurals>
+    <string name="error_otp_expired">This code has expired. Request a new one.</string>
+    <string name="error_otp_used">This code was already used. Request a new one.</string>
+    <string name="error_otp_too_many">Too many wrong codes. Request a new one.</string>
+    <plurals name="error_otp_rate_limited">
+        <item quantity="one">Please wait %1$d second before requesting another code.</item>
+        <item quantity="other">Please wait %1$d seconds before requesting another code.</item>
+    </plurals>
     <string name="error_google_no_account">No Google account found on this device</string>
-    <string name="error_google_failed">Google sign-in didn\'t work. Try again or use your password.</string>
+    <string name="error_google_failed">Google sign-in didn\'t work. Try again.</string>
     <string name="error_network">Can\'t reach the server. Check your connection and try again.</string>
     <string name="error_rate_limited">Too many attempts. Wait a minute and try again.</string>
     <string name="error_server">Something went wrong on our side. Try again shortly.</string>
@@ -149,9 +173,9 @@
     <string name="action_delete_account">Delete account</string>
     <string name="delete_account_summary">Permanently remove your profile, posts, comments, likes and messages</string>
     <string name="delete_account_title">Delete your account?</string>
-    <string name="delete_account_body">This permanently deletes your profile, posts, comments, likes, follows and messages. It can\'t be undone. Enter your password to confirm.</string>
+    <string name="delete_account_body">This permanently deletes your profile, posts, comments, likes, follows and messages. It can\'t be undone. To confirm, we\'ll send a code to your phone.</string>
     <string name="action_confirm_with_google">Confirm with Google instead</string>
-    <string name="error_reauth_failed">That didn\'t match. Check your password and try again.</string>
+    <string name="error_reauth_failed">That didn\'t confirm it\'s you. Try the code again or confirm with Google.</string>
 
     <plurals name="cd_unread_activity">
         <item quantity="one">%1$d new notification</item>

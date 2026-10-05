@@ -24,6 +24,7 @@ exifinterface = "1.4.2"
 paging = "3.5.1"
 firebaseBom = "34.19.0"
 googleServices = "4.5.0"
+libphonenumber = "9.0.40"
 # Testing
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -91,6 +92,7 @@ coil-network-ktor3 = { group = "io.coil-kt.coil3", name = "coil-network-ktor3", 
 koin-androidx-workmanager = { group = "io.insert-koin", name = "koin-androidx-workmanager" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+libphonenumber-android = { group = "io.michaelrocks", name = "libphonenumber-android", version.ref = "libphonenumber" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

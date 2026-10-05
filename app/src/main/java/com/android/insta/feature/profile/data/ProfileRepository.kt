@@ -9,8 +9,15 @@ import com.android.insta.core.network.jsonBody
 import com.android.insta.core.network.map
 import com.android.insta.core.network.safeApiCall
 import com.android.insta.core.session.SessionStore
+import com.android.insta.feature.auth.data.OtpChallenge
+import com.android.insta.feature.auth.data.OtpChallengeDto
+import com.android.insta.feature.auth.data.PhoneOtpRequest
 import com.android.insta.feature.auth.data.UserDto
+import com.android.insta.feature.auth.data.VerifyOtpRequest
+import com.android.insta.feature.auth.data.toChallenge
 import com.android.insta.feature.auth.data.toSessionUser
+import io.ktor.client.request.post
+import io.ktor.client.request.put
 import com.android.insta.feature.post.data.MediaKind
 import com.android.insta.feature.post.data.PageDto
 import com.android.insta.feature.post.data.Post
@@ -60,6 +67,13 @@ class ProfileApi(private val client: HttpClient) {
 
     suspend fun updateMe(request: UpdateProfileRequest): ApiResult<UserDto> =
         safeApiCall { client.patch("api/v1/me") { jsonBody(request) } }
+
+    /** Change phone, step 1: the code goes to the new number. */
+    suspend fun requestPhoneChange(request: PhoneOtpRequest): ApiResult<OtpChallengeDto> =
+        safeApiCall { client.post("api/v1/me/phone/otp") { jsonBody(request) } }
+
+    suspend fun confirmPhoneChange(request: VerifyOtpRequest): ApiResult<UserDto> =
+        safeApiCall { client.put("api/v1/me/phone") { jsonBody(request) } }
 }
 
 data class Profile(
@@ -90,6 +104,12 @@ interface ProfileRepository {
 
     /** Saves profile edits and refreshes the cached session user. Null fields stay unchanged. */
     suspend fun updateProfile(displayName: String?, bio: String?, avatarMediaId: String?, removeAvatar: Boolean): ApiResult<Unit>
+
+    /** Sends a code to the new (E.164) number; `PHONE_IN_USE` if another account has it. */
+    suspend fun requestPhoneChange(phone: String): ApiResult<OtpChallenge>
+
+    /** Verifies the code; the new number replaces the old one in the account and the cached session user. */
+    suspend fun confirmPhoneChange(challengeId: String, code: String): ApiResult<Unit>
 }
 
 class DefaultProfileRepository(
@@ -143,6 +163,14 @@ class DefaultProfileRepository(
                 sessionStore.updateUser(result.value.toSessionUser())
                 _profileChanged.tryEmit(Unit)
             }
+        }.map { }
+
+    override suspend fun requestPhoneChange(phone: String): ApiResult<OtpChallenge> =
+        api.requestPhoneChange(PhoneOtpRequest(phone)).map { it.toChallenge() }
+
+    override suspend fun confirmPhoneChange(challengeId: String, code: String): ApiResult<Unit> =
+        api.confirmPhoneChange(VerifyOtpRequest(challengeId, code.trim())).also { result ->
+            if (result is ApiResult.Success) sessionStore.updateUser(result.value.toSessionUser())
         }.map { }
 
     private companion object {

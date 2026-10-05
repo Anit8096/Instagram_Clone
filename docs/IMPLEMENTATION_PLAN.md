@@ -19,8 +19,8 @@ Versions were checked against Google Maven, Maven Central, and the Gradle Plugin
 | M6 Real-time DMs | Done | 42 server tests, 77 app unit tests; journey `m6-dm.xml` passed |
 | M7 Notifications + FCM | Done | 44 server tests, 84 app unit tests; journey `m7-notifications.xml` passed (FCM delivery itself needs a Firebase project; see `docs/running-the-app.md`) |
 | M8 Account deletion, hardening, showcase | Done | 47 server tests, 88 app unit tests, 3 instrumented; journey `m8-account.xml` passed; CI workflow + README |
-| M9 Server: Google-first + phone OTP auth | Done (on branch, merges with M10) | 51 server tests (all suites moved to Google + phone sign-up); live check on Docker: seeded phone sign-in, NO_LINKED_ACCOUNT, OTP_INVALID with attempts left, password endpoint 404 |
-| M10 App: Welcome, phone sign-in, onboarding, OTP flows | Planned | |
+| M9 Server: Google-first + phone OTP auth | Done | 51 server tests (all suites moved to Google + phone sign-up); live check on Docker: seeded phone sign-in, NO_LINKED_ACCOUNT, OTP_INVALID with attempts left, password endpoint 404 |
+| M10 App: Welcome, phone sign-in, onboarding, OTP flows | Done | 89 app unit tests (login/register tests replaced by Welcome, phone sign-in, onboarding, change phone, settings, repository and libphonenumber tests); lint 0 errors; journey `m10-phone-auth.xml` 16/16 including real Google sign-up |
 
 Changes from this plan made during M2:
 - Kotlin 2.4.20 is applied by putting `kotlin-gradle-plugin` on the root buildscript classpath (AGP 9 built-in Kotlin, per the AGP 9.0 release notes).
@@ -345,3 +345,20 @@ Changes made during M9:
 - An invalid or expired onboarding token is `401 INVALID_ONBOARDING_TOKEN`; the app must restart Google sign-in. Onboarding codes are bound to the Google subject, login/change/delete codes to the account.
 - `OTP_DEV_ECHO` is passed through `docker-compose.yml` (default `false`) and set to `true` in `.env.example` for local demos.
 - The README and run instructions still describe passwords; they're updated with the app in M10, since M9 alone isn't merged.
+
+Changes made during M10:
+- No separate `OtpEntry` route: phone sign-in and onboarding are each one screen with two steps (number → code), and
+  change phone is its own screen (`DetailRoute.ChangePhone`). Keeping the challenge in the ViewModel avoids putting
+  it in the saved back stack. The shared pieces are `core/ui` `PhoneNumberField` (searchable M3 bottom-sheet country
+  picker, flag emoji from the region code) and `OtpStep` (6-digit field with the SMS-code autofill content type,
+  resend countdown, and the dev-echoed code shown only in debug builds).
+- On onboarding the username and name stay editable during the code step, so `USERNAME_TAKEN` (checked before the
+  code is consumed) only asks for a new username, not a new code.
+- `PhoneNumbers` interface (`LibPhoneNumbers` on device, a fake in ViewModel tests); the real metadata is tested
+  under Robolectric. The country defaults to the SIM/network country, then the locale.
+- The session stores the user's own phone (`SessionUser.phone`); Edit profile shows it formatted and follows the
+  session, so a change shows up immediately.
+- Removed: Login/Register screens and ViewModels, password field, email/password validation and their tests
+  (17 tests), and strings that only they used.
+- Google OAuth turned out to be configured in this environment, so the journey also covered real Google sign-up and
+  re-sign-in on the emulator.

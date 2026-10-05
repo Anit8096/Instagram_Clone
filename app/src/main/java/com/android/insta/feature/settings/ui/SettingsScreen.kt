@@ -9,11 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -23,7 +24,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,8 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -44,12 +42,16 @@ import androidx.lifecycle.viewModelScope
 import com.android.insta.R
 import com.android.insta.core.network.ApiResult
 import com.android.insta.core.network.AppError
+import com.android.insta.core.ui.OtpStep
+import com.android.insta.core.ui.OtpStepState
 import com.android.insta.core.ui.UiMessage
 import com.android.insta.core.ui.asString
-import com.android.insta.core.ui.toUiMessage
+import com.android.insta.core.ui.launchCountdown
+import com.android.insta.core.ui.toAuthMessage
 import com.android.insta.feature.auth.data.AuthRepository
 import com.android.insta.feature.auth.data.GoogleSignInClient
 import com.android.insta.feature.auth.data.GoogleSignInResult
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,10 +63,11 @@ import org.koin.compose.koinInject
 data class SettingsUiState(
     val isLoggingOut: Boolean = false,
     val isDeleteDialogOpen: Boolean = false,
-    val password: String = "",
+    val isSendingCode: Boolean = false,
+    /** Non-null once a confirmation code was sent to the account's phone. */
+    val deleteOtp: OtpStepState? = null,
     val isDeleting: Boolean = false,
     val deleteError: UiMessage? = null,
-    /** Google-only accounts confirm with Google instead of a password. */
     val canConfirmWithGoogle: Boolean = false,
 )
 
@@ -72,8 +75,9 @@ sealed interface SettingsEvent {
     data object Logout : SettingsEvent
     data object OpenDelete : SettingsEvent
     data object DismissDelete : SettingsEvent
-    data class PasswordChanged(val value: String) : SettingsEvent
-    data object ConfirmWithPassword : SettingsEvent
+    data object SendDeleteCode : SettingsEvent
+    data class CodeChanged(val value: String) : SettingsEvent
+    data object ConfirmWithCode : SettingsEvent
     data object GoogleStarted : SettingsEvent
     data class GoogleResult(val result: GoogleSignInResult) : SettingsEvent
 }
@@ -82,6 +86,7 @@ sealed interface SettingsEvent {
 class SettingsViewModel(private val auth: AuthRepository, googleConfigured: Boolean) : ViewModel() {
     private val _state = MutableStateFlow(SettingsUiState(canConfirmWithGoogle = googleConfigured))
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
+    private var countdown: Job? = null
 
     fun onEvent(event: SettingsEvent) {
         when (event) {
@@ -89,20 +94,22 @@ class SettingsViewModel(private val auth: AuthRepository, googleConfigured: Bool
                 _state.update { it.copy(isLoggingOut = true) }
                 viewModelScope.launch { auth.logout() }
             }
-            SettingsEvent.OpenDelete -> _state.update { it.copy(isDeleteDialogOpen = true, password = "", deleteError = null) }
-            SettingsEvent.DismissDelete -> if (!_state.value.isDeleting) _state.update { it.copy(isDeleteDialogOpen = false, password = "") }
-            is SettingsEvent.PasswordChanged -> _state.update { it.copy(password = event.value, deleteError = null) }
-            SettingsEvent.ConfirmWithPassword -> {
-                val password = _state.value.password
-                if (password.isEmpty()) {
-                    _state.update { it.copy(deleteError = UiMessage.Resource(R.string.error_required)) }
-                } else {
-                    delete(password = password, googleIdToken = null)
-                }
+            SettingsEvent.OpenDelete -> _state.update { it.copy(isDeleteDialogOpen = true, deleteError = null) }
+            SettingsEvent.DismissDelete -> if (!_state.value.isDeleting) {
+                countdown?.cancel()
+                _state.update { it.copy(isDeleteDialogOpen = false, deleteOtp = null, deleteError = null) }
+            }
+            SettingsEvent.SendDeleteCode -> sendCode()
+            is SettingsEvent.CodeChanged -> _state.update { s -> s.copy(deleteOtp = s.deleteOtp?.copy(code = event.value, error = null)) }
+            SettingsEvent.ConfirmWithCode -> {
+                val otp = _state.value.deleteOtp ?: return
+                if (!otp.canVerify) return
+                _state.update { it.copy(deleteOtp = otp.copy(isVerifying = true, error = null)) }
+                delete(otp.challengeId, otp.code, googleIdToken = null)
             }
             SettingsEvent.GoogleStarted -> _state.update { it.copy(isDeleting = true, deleteError = null) }
             is SettingsEvent.GoogleResult -> when (val result = event.result) {
-                is GoogleSignInResult.Success -> delete(password = null, googleIdToken = result.idToken)
+                is GoogleSignInResult.Success -> delete(challengeId = null, code = null, googleIdToken = result.idToken)
                 GoogleSignInResult.Cancelled -> _state.update { it.copy(isDeleting = false) }
                 GoogleSignInResult.NoAccount -> _state.update { it.copy(isDeleting = false, deleteError = UiMessage.Resource(R.string.error_google_no_account)) }
                 is GoogleSignInResult.Failure -> _state.update { it.copy(isDeleting = false, deleteError = UiMessage.Resource(R.string.error_google_failed)) }
@@ -110,19 +117,41 @@ class SettingsViewModel(private val auth: AuthRepository, googleConfigured: Bool
         }
     }
 
-    private fun delete(password: String?, googleIdToken: String?) {
+    private fun sendCode() {
+        val s = _state.value
+        if (s.isSendingCode || s.deleteOtp?.canResend == false) return
+        _state.update { it.copy(isSendingCode = true, deleteError = null) }
+        viewModelScope.launch {
+            when (val result = auth.requestDeleteOtp()) {
+                is ApiResult.Success -> {
+                    _state.update { it.copy(isSendingCode = false, deleteOtp = OtpStepState.from(result.value)) }
+                    countdown?.cancel()
+                    countdown = viewModelScope.launchCountdown(result.value.resendInSeconds) { left ->
+                        _state.update { st -> st.copy(deleteOtp = st.deleteOtp?.copy(resendIn = left)) }
+                    }
+                }
+                is ApiResult.Failure -> _state.update { it.copy(isSendingCode = false, deleteError = result.error.toAuthMessage()) }
+            }
+        }
+    }
+
+    private fun delete(challengeId: String?, code: String?, googleIdToken: String?) {
         _state.update { it.copy(isDeleting = true, deleteError = null) }
         viewModelScope.launch {
-            when (val result = auth.deleteAccount(password, googleIdToken)) {
+            when (val result = auth.deleteAccount(challengeId, code, googleIdToken)) {
                 // Success: the session is gone and this screen leaves composition with the signed-in shell.
                 is ApiResult.Success -> Unit
-                is ApiResult.Failure -> _state.update { it.copy(isDeleting = false, deleteError = result.error.toDeleteMessage()) }
+                is ApiResult.Failure -> _state.update { s ->
+                    val message = result.error.toDeleteMessage()
+                    if (challengeId != null) s.copy(isDeleting = false, deleteOtp = s.deleteOtp?.copy(isVerifying = false, code = "", error = message))
+                    else s.copy(isDeleting = false, deleteError = message)
+                }
             }
         }
     }
 
     private fun AppError.toDeleteMessage(): UiMessage =
-        if (this is AppError.Api && code == "REAUTH_FAILED") UiMessage.Resource(R.string.error_reauth_failed) else toUiMessage()
+        if (this is AppError.Api && code == "REAUTH_FAILED") UiMessage.Resource(R.string.error_reauth_failed) else toAuthMessage()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -174,36 +203,42 @@ fun SettingsScreen(
 
 @Composable
 private fun DeleteAccountDialog(state: SettingsUiState, onEvent: (SettingsEvent) -> Unit, onConfirmWithGoogle: () -> Unit) {
+    val busy = state.isDeleting || state.isSendingCode
     AlertDialog(
         onDismissRequest = { onEvent(SettingsEvent.DismissDelete) },
         title = { Text(stringResource(R.string.delete_account_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.delete_account_body))
-                OutlinedTextField(
-                    value = state.password,
-                    onValueChange = { onEvent(SettingsEvent.PasswordChanged(it)) },
-                    label = { Text(stringResource(R.string.field_password)) },
-                    singleLine = true,
-                    enabled = !state.isDeleting,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    isError = state.deleteError != null,
-                    supportingText = state.deleteError?.let { { Text(it.asString()) } },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                val otp = state.deleteOtp
+                if (otp == null) {
+                    Button(
+                        onClick = { onEvent(SettingsEvent.SendDeleteCode) },
+                        enabled = !busy,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (state.isSendingCode) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Text(stringResource(R.string.action_send_code))
+                    }
+                } else {
+                    OtpStep(
+                        state = otp,
+                        verifyLabel = stringResource(R.string.action_delete),
+                        onCodeChange = { onEvent(SettingsEvent.CodeChanged(it)) },
+                        onVerify = { onEvent(SettingsEvent.ConfirmWithCode) },
+                        onResend = { onEvent(SettingsEvent.SendDeleteCode) },
+                    )
+                }
+                state.deleteError?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error) }
                 if (state.canConfirmWithGoogle) {
-                    OutlinedButton(onClick = onConfirmWithGoogle, enabled = !state.isDeleting, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = onConfirmWithGoogle, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.action_confirm_with_google))
                     }
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onEvent(SettingsEvent.ConfirmWithPassword) }, enabled = !state.isDeleting) {
-                if (state.isDeleting) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) else Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = { onEvent(SettingsEvent.DismissDelete) }, enabled = !state.isDeleting) { Text(stringResource(R.string.action_cancel)) }
         },

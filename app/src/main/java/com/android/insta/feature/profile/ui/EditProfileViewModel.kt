@@ -30,6 +30,8 @@ data class EditProfileUiState(
     val error: UiMessage? = null,
     val isSaving: Boolean = false,
     val saved: Boolean = false,
+    /** The account's phone, formatted; changed on its own screen (it needs a code). */
+    val phone: String? = null,
 ) {
     val shownAvatarUrl: String? get() = newAvatar?.url ?: currentAvatarUrl.takeUnless { removeAvatar }
     val canSave: Boolean get() = !isLoading && !isSaving && !isUploadingAvatar && displayNameError == null && bioError == null
@@ -46,12 +48,20 @@ sealed interface EditProfileEvent {
 class EditProfileViewModel(
     private val profiles: ProfileRepository,
     sessionManager: SessionManager,
+    formatPhone: (String) -> String = { it },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(EditProfileUiState())
     val state: StateFlow<EditProfileUiState> = _state.asStateFlow()
 
     init {
+        // Follows the session so a number changed on the Change phone screen shows up on return.
+        viewModelScope.launch {
+            sessionManager.state.collect { session ->
+                val phone = (session as? SessionState.LoggedIn)?.user?.phone?.let(formatPhone)
+                _state.update { it.copy(phone = phone) }
+            }
+        }
         val username = (sessionManager.state.value as? SessionState.LoggedIn)?.user?.username
         viewModelScope.launch {
             when (val result = username?.let { profiles.profile(it) }) {

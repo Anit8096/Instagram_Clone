@@ -33,8 +33,10 @@ import androidx.navigation3.ui.NavDisplay
 import com.android.insta.R
 import com.android.insta.core.session.SessionManager
 import com.android.insta.core.session.SessionState
-import com.android.insta.feature.auth.ui.LoginScreen
-import com.android.insta.feature.auth.ui.RegisterScreen
+import com.android.insta.feature.auth.ui.OnboardingScreen
+import com.android.insta.feature.auth.ui.PhoneSignInScreen
+import com.android.insta.feature.auth.ui.WelcomeScreen
+import com.android.insta.feature.profile.ui.ChangePhoneScreen
 import com.android.insta.feature.engagement.ui.CommentsScreen
 import com.android.insta.feature.chat.ui.InboxScreen
 import com.android.insta.feature.chat.ui.ThreadScreen
@@ -78,17 +80,25 @@ fun InstaRoot(sessionManager: SessionManager = koinInject()) {
 
 @Composable
 private fun AuthFlow() {
-    val backStack = rememberNavBackStack(AuthRoute.Login)
+    val backStack = rememberNavBackStack(AuthRoute.Welcome)
+    val backToWelcome: () -> Unit = { while (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
         entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator(), rememberViewModelStoreNavEntryDecorator()),
         entryProvider = entryProvider {
-            entry<AuthRoute.Login> {
-                LoginScreen(onNavigateToRegister = { backStack.add(AuthRoute.Register) })
+            entry<AuthRoute.Welcome> {
+                WelcomeScreen(
+                    onPhoneSignIn = { backStack.add(AuthRoute.PhoneSignIn) },
+                    onNeedsOnboarding = { backStack.add(AuthRoute.Onboarding(it.onboardingToken, it.suggestedUsername, it.displayName)) },
+                )
             }
-            entry<AuthRoute.Register> {
-                RegisterScreen(onNavigateToLogin = { backStack.removeLastOrNull() })
+            entry<AuthRoute.PhoneSignIn> {
+                // "No linked account" → Google on the Welcome screen is how accounts are created.
+                PhoneSignInScreen(onBack = backToWelcome, onUseGoogle = backToWelcome)
+            }
+            entry<AuthRoute.Onboarding> { key ->
+                OnboardingScreen(key.onboardingToken, key.suggestedUsername, key.displayName, onBack = backToWelcome)
             }
         },
     )
@@ -193,7 +203,10 @@ private fun MainShell(
             )
         }
         entry<DetailRoute.EditProfile> {
-            EditProfileScreen(onDone = { navigator.goBack() })
+            EditProfileScreen(onDone = { navigator.goBack() }, onChangePhone = { navigator.navigate(DetailRoute.ChangePhone) })
+        }
+        entry<DetailRoute.ChangePhone> {
+            ChangePhoneScreen(onDone = { navigator.goBack() })
         }
     }
 

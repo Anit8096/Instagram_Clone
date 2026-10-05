@@ -23,6 +23,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -44,7 +45,7 @@ import com.android.insta.core.ui.asString
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun EditProfileScreen(onDone: () -> Unit, viewModel: EditProfileViewModel = koinViewModel()) {
+fun EditProfileScreen(onDone: () -> Unit, onChangePhone: () -> Unit = {}, viewModel: EditProfileViewModel = koinViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         uri?.let { viewModel.onEvent(EditProfileEvent.AvatarPicked(it)) }
@@ -55,6 +56,7 @@ fun EditProfileScreen(onDone: () -> Unit, viewModel: EditProfileViewModel = koin
         onEvent = viewModel::onEvent,
         onPickAvatar = { picker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
         onBack = onDone,
+        onChangePhone = onChangePhone,
     )
 }
 
@@ -65,6 +67,7 @@ fun EditProfileContent(
     onEvent: (EditProfileEvent) -> Unit,
     onPickAvatar: () -> Unit,
     onBack: () -> Unit,
+    onChangePhone: () -> Unit = {},
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -127,6 +130,12 @@ fun EditProfileContent(
                 isError = state.bioError != null,
                 supportingText = { Text(state.bioError?.asString() ?: "${state.bio.length} / ${EditProfileViewModel.BIO_MAX}") },
                 minLines = 2,
+                modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
+            )
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.field_phone)) },
+                supportingContent = { Text(state.phone ?: stringResource(R.string.phone_not_set)) },
+                trailingContent = { TextButton(onClick = onChangePhone) { Text(stringResource(R.string.action_change)) } },
                 modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth(),
             )
             state.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error) }

@@ -57,14 +57,27 @@ On recent Android versions the picker asks you to tap **Done** after selecting a
 docker compose exec server java -cp "/app/lib/*" com.android.insta.server.seed.SeedKt
 ```
 
-Creates six accounts (`maya.travels`, `leo.bakes`, `ana.draws`, `sam.runs`, `noor.codes`, `kai.garden`, all with
-password `demo-password`), each with an avatar and three posts, plus follows, likes, comments and a conversation
-between maya and leo. Running it again does nothing. Outside Docker: `cd server && ./gradlew seed` with the same env
-vars as the server.
+Creates six accounts (`maya.travels`, `leo.bakes`, `ana.draws`, `sam.runs`, `noor.codes`, `kai.garden`), each with
+an avatar and three posts, plus follows, likes, comments and a conversation between maya and leo. They sign in by
+phone: **+1 201-555-0101** to **…0106** in that order. Running it again does nothing. Outside Docker:
+`cd server && ./gradlew seed` with the same env vars as the server.
 
-## Google sign-in (optional)
+## Sign-in codes (phone + OTP)
 
-The "Continue with Google" button only appears when an OAuth **Web** client ID is configured:
+Codes are 6 digits, valid for 5 minutes, single-use, at most 5 wrong tries, 30 s between sends and 5 per number per
+hour. Locally they're "sent" by writing them to the server log:
+
+```sh
+docker compose logs server | grep "SMS to"
+```
+
+With `OTP_DEV_ECHO=true` in `.env` (local only) the API also returns the code and debug builds show it under the code
+field. A real SMS provider can be added behind the server's `SmsSender` interface.
+
+## Google sign-in (needed to create accounts)
+
+New accounts are created only with Google sign-in, followed by a username and a verified phone. Without an OAuth
+client ID the "Continue with Google" button is hidden and only existing accounts can sign in (by phone):
 
 1. In Google Cloud Console, create an OAuth client of type *Web application*, plus an *Android*
    client for `com.android.insta` with your debug keystore's SHA-1 (`./gradlew :app:signingReport`).

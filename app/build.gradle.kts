@@ -126,6 +126,8 @@ dependencies {
     // FCM push (InstaMessagingService); inert unless google-services.json is present.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    // Phone sign-in: validation, E.164 formatting and the country list (Android build of Google's libphonenumber).
+    implementation(libs.libphonenumber.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

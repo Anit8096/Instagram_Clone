@@ -2,7 +2,7 @@ package com.android.insta.core.network
 
 import com.android.insta.core.session.Session
 import com.android.insta.feature.auth.data.AuthApi
-import com.android.insta.feature.auth.data.LoginRequest
+import com.android.insta.feature.auth.data.GoogleLoginRequest
 import com.android.insta.feature.profile.data.ProfileApi
 import com.android.insta.testutil.FakeSessionStore
 import com.android.insta.testutil.TEST_USER
@@ -106,17 +106,17 @@ class HttpClientAuthTest {
     }
 
     @Test
-    fun `wrong password on login does not trigger a token refresh`() = runTest {
+    fun `a rejected google token on sign-in does not trigger a token refresh`() = runTest {
         val client = client { request ->
-            if (request.url.encodedPath == "/api/v1/auth/login") {
-                respond("""{"error":{"code":"INVALID_CREDENTIALS","message":"Incorrect"}}""", HttpStatusCode.Unauthorized, bearerChallenge)
+            if (request.url.encodedPath == "/api/v1/auth/google") {
+                respond("""{"error":{"code":"INVALID_GOOGLE_TOKEN","message":"Invalid"}}""", HttpStatusCode.Unauthorized, bearerChallenge)
             } else {
                 null
             }
         }
-        val result = AuthApi(client).login(LoginRequest("jane.doe", "wrong"))
+        val result = AuthApi(client).loginWithGoogle(GoogleLoginRequest("forged"))
 
-        assertEquals("INVALID_CREDENTIALS", ((result as ApiResult.Failure).error as AppError.Api).code)
+        assertEquals("INVALID_GOOGLE_TOKEN", ((result as ApiResult.Failure).error as AppError.Api).code)
         assertEquals(0, refreshCalls.get())
         assertEquals("old-access", store.current()?.accessToken)
     }

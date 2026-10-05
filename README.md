@@ -10,8 +10,10 @@ action queue.
 
 ## Features
 
-- **Accounts**: email/username + password (Argon2id), Google Sign-In via Credential Manager, JWT access tokens with
-  rotating refresh tokens and reuse detection, account deletion with re-authentication.
+- **Accounts**: Google-first. Accounts are created with Google Sign-In (Credential Manager) plus onboarding with a
+  phone number verified by a one-time code; existing accounts can also sign in with phone + code. The server's
+  codes are hashed, expire, are single-use and throttled. JWT access tokens with rotating refresh tokens and reuse
+  detection. Changing your phone and deleting your account are confirmed with a code.
 - **Posts**: single photo + caption. The server validates, strips EXIF, resizes (1080 px) and makes a thumbnail.
   Uploads run in WorkManager, with drafts kept in Room.
 - **Social**: follow/unfollow, a chronological feed built at read time, likes, comments, user search (pg_trgm) and an
@@ -94,17 +96,18 @@ adb reverse tcp:8080 tcp:8080
 ./gradlew :app:installDebug -Pinsta.apiBaseUrl=http://localhost:8080
 ```
 
-Sign in as **maya.travels / demo-password** (or any of `leo.bakes`, `ana.draws`, `sam.runs`, `noor.codes`,
-`kai.garden`, all with the same password).
+Tap **Sign in with phone** and sign in as **maya.travels** with **+1 201-555-0101** (the other demo accounts are
+`…0102` to `…0106`). Codes appear in the server log (`docker compose logs server | grep "SMS to"`); with
+`OTP_DEV_ECHO=true` (set in `.env.example` for local use) debug builds also show the code on screen.
 
-Google Sign-In and FCM push are optional. Without them everything else works, including the live Activity badge.
-Setup steps are in [`docs/running-the-app.md`](docs/running-the-app.md).
+Creating new accounts needs Google Sign-In (OAuth client IDs); FCM push is optional. Setup steps are in
+[`docs/running-the-app.md`](docs/running-the-app.md).
 
 ## Tests
 
 ```sh
-cd server && ./gradlew test                                   # 47 tests: routes, auth, media, chat/WebSocket, push, seeding (Testcontainers)
-./gradlew :app:testDebugUnitTest :app:lintDebug               # 88 tests: ViewModels, repositories, queue, navigation, Koin graph, Robolectric UI
+cd server && ./gradlew test                                   # 51 tests: routes, Google + phone OTP auth, media, chat/WebSocket, push, seeding (Testcontainers)
+./gradlew :app:testDebugUnitTest :app:lintDebug               # 89 tests: ViewModels, repositories, queue, navigation, phone numbers, Koin graph
 ./gradlew :app:connectedDebugAndroidTest                      # Room DAO tests on a device
 ```
 

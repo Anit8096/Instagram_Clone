@@ -14,6 +14,8 @@ data class SessionUser(
     val username: String,
     val displayName: String,
     val avatarUrl: String? = null,
+    /** The account's verified phone (E.164), private to this user. */
+    val phone: String? = null,
 )
 
 data class Session(val accessToken: String, val refreshToken: String, val user: SessionUser)

@@ -1,0 +1,25 @@
+<journey name="M10 Google-first sign-in with phone OTP">
+   <description>
+      Fresh app data; backend reachable, seeded, and running with OTP_DEV_ECHO=true (debug builds show the code under
+      the code field); Google OAuth configured and a Google account on the device. Demo numbers: maya.travels
+      +1 201-555-0101, kai.garden +1 201-555-0106; unseeded test numbers 201-555-0150 and 201-555-0177.
+   </description>
+   <actions>
+     <action>Verify that the Welcome screen shows "Continue with Google" as the main action and "Sign in with phone"</action>
+     <action>Tap "Sign in with phone", enter "2015550150" (United States) and tap "Send code"</action>
+     <action>Verify that "No account is linked to this number. Sign in with Google to create one." and a "Continue with Google" button are shown</action>
+     <action>Select "United States" in the country picker, enter "2015550101" and tap "Send code"</action>
+     <action>Verify that "Enter the code we sent to +1 ••••••0101." and a resend countdown are shown</action>
+     <action>Enter "000000" and tap "Sign in"; verify "That code isn't right. 4 tries left." is shown</action>
+     <action>Enter the code shown as "Dev build: the code is …" and tap "Sign in"; verify that the Home feed is shown</action>
+     <action>Open Profile → "Edit profile"; verify the Phone row shows "+1 201-555-0101"</action>
+     <action>Tap "Change", select "United States", enter "2015550199", tap "Send code", enter the dev code and tap "Save"; verify the Phone row shows "+1 201-555-0199"</action>
+     <action>Go back to Profile → "Settings" → "Log out"; verify the Welcome screen is shown</action>
+     <action>Sign in by phone as kai.garden (+1 201-555-0106) with the dev code</action>
+     <action>Open Profile → "Settings" → "Delete account" → "Send code", enter the dev code and tap "Delete"; verify the Welcome screen is shown</action>
+     <action>Sign in by phone with +1 201-555-0106 again; verify "No account is linked to this number" is shown</action>
+     <action>Tap "Continue with Google", then "Continue with Google" on the Welcome screen and pick the device's Google account</action>
+     <action>Verify the "Almost done" onboarding screen is prefilled with a suggested username and the Google name; enter "2015550177", tap "Send code", enter the dev code and tap "Create account"; verify the Home feed is shown</action>
+     <action>Log out, then "Continue with Google" with the same account; verify it signs straight in to the Home feed</action>
+   </actions>
+</journey>

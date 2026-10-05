@@ -21,12 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -35,15 +30,13 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.android.insta.R
 import com.android.insta.core.ui.UiMessage
 import com.android.insta.core.ui.asString
 
 /**
- * Scrollable, keyboard-aware form layout shared by login and register. safeDrawing insets include
+ * Scrollable, keyboard-aware form layout shared by the sign-in and onboarding screens. safeDrawing insets include
  * the IME, so the focused field stays visible above the keyboard (edge-to-edge guidance).
  */
 @Composable
@@ -96,37 +89,6 @@ internal fun AuthTextField(
         enabled = enabled,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
-        keyboardActions = KeyboardActions(onAny = { onImeAction() }),
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-@Composable
-internal fun PasswordField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    error: UiMessage?,
-    enabled: Boolean,
-    imeAction: ImeAction,
-    onImeAction: () -> Unit,
-) {
-    var visible by rememberSaveable { mutableStateOf(false) }
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        isError = error != null,
-        supportingText = error?.let { { Text(it.asString()) } },
-        enabled = enabled,
-        singleLine = true,
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            TextButton(onClick = { visible = !visible }) {
-                Text(stringResource(if (visible) R.string.action_hide else R.string.action_show))
-            }
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction),
         keyboardActions = KeyboardActions(onAny = { onImeAction() }),
         modifier = Modifier.fillMaxWidth(),
     )

@@ -109,6 +109,16 @@ class FakeProfileRepository : ProfileRepository {
         calls += "update:$displayName|$bio|$avatarMediaId|$removeAvatar"
         return updateResult
     }
+    var phoneOtpResult: ApiResult<com.android.insta.feature.auth.data.OtpChallenge> = ApiResult.Success(TEST_CHALLENGE)
+    var confirmPhoneResult: ApiResult<Unit> = ApiResult.Success(Unit)
+    override suspend fun requestPhoneChange(phone: String): ApiResult<com.android.insta.feature.auth.data.OtpChallenge> {
+        calls += "phoneOtp:$phone"
+        return phoneOtpResult
+    }
+    override suspend fun confirmPhoneChange(challengeId: String, code: String): ApiResult<Unit> {
+        calls += "confirmPhone:$challengeId:$code"
+        return confirmPhoneResult
+    }
 }
 
 class FakeSocialRepository : com.android.insta.feature.social.data.SocialRepository {

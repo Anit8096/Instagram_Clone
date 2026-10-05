@@ -18,8 +18,12 @@ import com.android.insta.feature.auth.data.CredentialManagerGoogleSignInClient
 import com.android.insta.feature.auth.data.DefaultAuthRepository
 import com.android.insta.feature.auth.data.GoogleSignInClient
 import com.android.insta.feature.auth.data.UserDataCleaner
-import com.android.insta.feature.auth.ui.LoginViewModel
-import com.android.insta.feature.auth.ui.RegisterViewModel
+import com.android.insta.core.phone.LibPhoneNumbers
+import com.android.insta.core.phone.PhoneNumbers
+import com.android.insta.feature.auth.ui.OnboardingViewModel
+import com.android.insta.feature.auth.ui.PhoneSignInViewModel
+import com.android.insta.feature.auth.ui.WelcomeViewModel
+import com.android.insta.feature.profile.ui.ChangePhoneViewModel
 import com.android.insta.feature.chat.data.ChatApi
 import com.android.insta.feature.chat.data.RealtimeClient
 import com.android.insta.feature.chat.ui.InboxViewModel
@@ -141,8 +145,10 @@ val authModule = module {
         }
     }
     single<AuthRepository> { DefaultAuthRepository(get(), get(), get(), get()) }
-    viewModel { LoginViewModel(get(), get<GoogleSignInClient>().isConfigured) }
-    viewModelOf(::RegisterViewModel)
+    single<PhoneNumbers> { LibPhoneNumbers(androidContext()) }
+    viewModel { WelcomeViewModel(get(), get<GoogleSignInClient>().isConfigured) }
+    viewModelOf(::PhoneSignInViewModel)
+    viewModel { params -> OnboardingViewModel(params.get(), params.get(), params.get(), get(), get()) }
 }
 
 val postModule = module {
@@ -160,7 +166,8 @@ val profileModule = module {
     single<ProfileRepository> { DefaultProfileRepository(get(), get(), get(), get(), get()) }
     viewModel { params -> ProfileViewModel(params.get(), get(), get(), get()) }
     viewModel { SettingsViewModel(get(), get<GoogleSignInClient>().isConfigured) }
-    viewModelOf(::EditProfileViewModel)
+    viewModel { EditProfileViewModel(get(), get(), get<PhoneNumbers>()::format) }
+    viewModelOf(::ChangePhoneViewModel)
 }
 
 val socialModule = module {

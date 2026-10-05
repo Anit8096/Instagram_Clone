@@ -1,14 +1,14 @@
 package com.android.insta.feature.settings.ui
 
 import com.android.insta.R
-import com.android.insta.core.network.ApiResult
-import com.android.insta.core.network.AppError
 import com.android.insta.core.ui.UiMessage
 import com.android.insta.feature.auth.data.GoogleSignInResult
 import com.android.insta.testutil.FakeAuthRepository
 import com.android.insta.testutil.MainDispatcherRule
+import com.android.insta.testutil.apiError
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -25,26 +25,27 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `delete needs a password before calling the server`() {
+    fun `delete sends a code to the account's phone, then confirms with it`() {
         viewModel.onEvent(SettingsEvent.OpenDelete)
-        viewModel.onEvent(SettingsEvent.ConfirmWithPassword)
-        assertEquals(UiMessage.Resource(R.string.error_required), viewModel.state.value.deleteError)
-        assertTrue(auth.calls.isEmpty())
+        viewModel.onEvent(SettingsEvent.SendDeleteCode)
+        assertEquals(listOf("deleteOtp"), auth.calls)
+        assertNotNull(viewModel.state.value.deleteOtp)
 
-        viewModel.onEvent(SettingsEvent.PasswordChanged("correct-horse"))
-        viewModel.onEvent(SettingsEvent.ConfirmWithPassword)
-        assertEquals(listOf("delete:correct-horse:-"), auth.calls)
+        viewModel.onEvent(SettingsEvent.CodeChanged("123456"))
+        viewModel.onEvent(SettingsEvent.ConfirmWithCode)
+        assertEquals("delete:c1:123456:-", auth.calls.last())
     }
 
     @Test
-    fun `wrong password shows a specific message and keeps the dialog open`() {
-        auth.deleteResult = ApiResult.Failure(AppError.Api(403, "REAUTH_FAILED", "nope"))
+    fun `a wrong code shows on the code step and keeps the dialog open`() {
+        auth.deleteResult = apiError(400, "OTP_EXPIRED")
         viewModel.onEvent(SettingsEvent.OpenDelete)
-        viewModel.onEvent(SettingsEvent.PasswordChanged("wrong-one"))
-        viewModel.onEvent(SettingsEvent.ConfirmWithPassword)
+        viewModel.onEvent(SettingsEvent.SendDeleteCode)
+        viewModel.onEvent(SettingsEvent.CodeChanged("123456"))
+        viewModel.onEvent(SettingsEvent.ConfirmWithCode)
 
         val state = viewModel.state.value
-        assertEquals(UiMessage.Resource(R.string.error_reauth_failed), state.deleteError)
+        assertEquals(UiMessage.Resource(R.string.error_otp_expired), state.deleteOtp?.error)
         assertTrue(state.isDeleteDialogOpen)
         assertFalse(state.isDeleting)
     }
@@ -58,6 +59,10 @@ class SettingsViewModelTest {
 
         viewModel.onEvent(SettingsEvent.GoogleStarted)
         viewModel.onEvent(SettingsEvent.GoogleResult(GoogleSignInResult.Success("fresh-token")))
-        assertEquals(listOf("delete:-:fresh-token"), auth.calls)
+        assertEquals("delete:-:-:fresh-token", auth.calls.last())
+
+        auth.deleteResult = apiError(403, "REAUTH_FAILED")
+        viewModel.onEvent(SettingsEvent.GoogleResult(GoogleSignInResult.Success("other-account")))
+        assertEquals(UiMessage.Resource(R.string.error_reauth_failed), viewModel.state.value.deleteError)
     }
 }

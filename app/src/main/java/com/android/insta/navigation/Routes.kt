@@ -3,11 +3,14 @@ package com.android.insta.navigation
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
-/** Destinations shown while signed out. */
+/** Destinations shown while signed out (Google first; phone + code for existing accounts). */
 @Serializable
 sealed interface AuthRoute : NavKey {
-    @Serializable data object Login : AuthRoute
-    @Serializable data object Register : AuthRoute
+    @Serializable data object Welcome : AuthRoute
+    @Serializable data object PhoneSignIn : AuthRoute
+
+    /** New Google user finishing sign-up; the token is short-lived (15 min) proof of the Google sign-in. */
+    @Serializable data class Onboarding(val onboardingToken: String, val suggestedUsername: String, val displayName: String) : AuthRoute
 }
 
 /** Top-level tabs of the signed-in app; each keeps its own back stack. */
@@ -31,4 +34,5 @@ sealed interface DetailRoute : NavKey {
     @Serializable data object Inbox : DetailRoute
     @Serializable data class Thread(val username: String) : DetailRoute
     @Serializable data object Settings : DetailRoute
+    @Serializable data object ChangePhone : DetailRoute
 }
