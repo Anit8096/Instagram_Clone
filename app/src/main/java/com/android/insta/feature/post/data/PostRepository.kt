@@ -130,14 +130,17 @@ class DefaultPostRepository(
     }
 
     override suspend fun createPost(imageUris: List<Uri>, caption: String, aspect: CropAspect): Result<Unit> {
-        require(imageUris.size in 1..MAX_POST_ITEMS) { "A post has 1 to $MAX_POST_ITEMS photos" }
+        if (imageUris.size !in 1..MAX_POST_ITEMS) {
+            return Result.failure(IllegalArgumentException("A post has 1 to $MAX_POST_ITEMS photos"))
+        }
         val files = mutableListOf<File>()
         return try {
             imageUris.forEach { files += compressor.compress(it, aspect.ratio) }
             val draftId = UUID.randomUUID().toString()
-            // Items first: the draft row is what the upload banner and the worker look for.
-            drafts.upsertItems(files.mapIndexed { position, file -> DraftItemEntity(draftId, position, file.path) })
-            drafts.upsert(PostDraftEntity(id = draftId, caption = caption.trim(), createdAt = now()))
+            drafts.insertDraftWithItems(
+                PostDraftEntity(id = draftId, caption = caption.trim(), createdAt = now()),
+                files.mapIndexed { position, file -> DraftItemEntity(draftId, position, file.path) },
+            )
             scheduler.enqueue(draftId)
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -184,9 +187,9 @@ class DefaultPostRepository(
         }
     }
 
+    /** Rows first, in one transaction; files only after it commits. */
     private suspend fun deleteDraft(draftId: String, items: List<DraftItemEntity>) {
-        drafts.delete(draftId)
-        drafts.deleteItems(draftId)
+        drafts.deleteDraftWithItems(draftId)
         items.forEach { File(it.localPath).delete() }
     }
 

@@ -11,6 +11,7 @@ import androidx.room3.PrimaryKey
 import androidx.room3.Query
 import androidx.room3.Room
 import androidx.room3.RoomDatabase
+import androidx.room3.Transaction
 import androidx.room3.ColumnTypeConverter
 import androidx.room3.ColumnTypeConverters
 import androidx.room3.migration.Migration
@@ -93,6 +94,19 @@ interface PostDraftDao {
 
     @Query("DELETE FROM draft_items")
     suspend fun deleteAllItems()
+
+    /** Draft and photos together, so a crash can't leave items without their draft (or the reverse). */
+    @Transaction
+    suspend fun insertDraftWithItems(draft: PostDraftEntity, items: List<DraftItemEntity>) {
+        upsertItems(items)
+        upsert(draft)
+    }
+
+    @Transaction
+    suspend fun deleteDraftWithItems(draftId: String) {
+        deleteItems(draftId)
+        delete(draftId)
+    }
 }
 
 /**

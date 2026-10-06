@@ -16,7 +16,7 @@ Versions were checked against Google Maven, Maven Central and Docker Hub on **20
 |---|---|---|
 | M11 Server: Redis infrastructure (queue, rate limits, cache) | Done | 65 server tests (+14: 11 job runner, 3 Redis features); live check on Docker: health up/degraded, OTP 503 with Redis stopped, cache fail-open, a job made due during the outage ran ~33 s after Redis returned |
 | M12 Server: carousels (multi-media posts) | Done | 70 server tests (+5: 4 carousel routes, 1 V6 migration); live check on Docker: seeded 18 posts / 30 items, a 3-item carousel served at 1080x1350 per item, delete removed its 3 items |
-| M13 App: carousels | Not started | |
+| M13 App: carousels | Done | 98 app unit tests (+9), 6 instrumented (+3: two Room 3→4 migration tests, draft items DAO); lint 0 errors; journey `m13-carousel.xml` 12/12 incl. offline share → force-stop → resume |
 | M14 Server: video upload, FFmpeg/HLS, reels | Not started | |
 | M15 App: video, Reels tab, navigation change | Not started | |
 | M16 Server: stories | Not started | |
@@ -352,6 +352,26 @@ backward compatible (additive DTO fields), so each can merge on its own before i
 - Notifications take the post thumbnail from the cover (`post_media.position = 0`).
 - Demo seed: each account's first post is a 3-photo carousel (18 posts, 30 photos).
 
+## Changes made during M13
+- **Room 3 → 4 is a hand-written `Migration`**, not an auto-migration: each draft's photo moves into `draft_items`
+  and `post_drafts` drops `imagePath` / `mediaId` (rows move between tables). Covered by `AppDatabaseMigrationTest`
+  (`room3-testing` 3.0.3 added for `MigrationTestHelper`). In Room 3 converters are `@ColumnTypeConverter(s)` and
+  `migrate` is `suspend`.
+- The feed cache keeps the carousel as a JSON `media` column (`MediaListConverter`) instead of a child table: items
+  are always read and written with their post. Old cached rows get `[]` and fall back to the cover fields
+  (`Post.items`).
+- **Cropping happens on the device** when compressing (`CropAspect`: Original, 1:1, 4:5, 1.91:1). With Original the
+  server still crops items 2…n to the cover (M12). The preview shows Original fitted in a square.
+- **Reordering** uses "Move earlier / Move later / Remove" on the selected thumbnail instead of drag and drop: simple,
+  accessible (each thumbnail is a selectable tab announcing "Photo n of m"), and testable in the ViewModel.
+- Picking again **adds** to the current selection (duplicates skipped, capped at 10 with a message) rather than
+  replacing it.
+- No double-tap like was added (the feed never had one); `PostMediaView` keeps tap-to-open.
+- The create strip's unselected thumbnails got a 1 dp outline after the journey showed a mostly-white photo was
+  invisible.
+- compose-reviewer: no blocker/major; three minor findings fixed (draft + items written and deleted in one `@Transaction`, files removed after commit; upload banner says "posts"; a bad photo count returns `Result.failure` instead of throwing).
+- The device used for tests and the journey is the `Pixel_8_Pro` AVD (API 37); `medium_phone` no longer exists.
+
 ## Remaining open items (default chosen)
 - Rate-limit algorithm: fixed window (default) vs sliding window log.
 - HLS segment format: fMP4 (default) vs MPEG-TS.
@@ -361,3 +381,6 @@ backward compatible (additive DTO fields), so each can merge on its own before i
   up to a minute.
 - Whether the profile Saved tab also lists saved reels: yes, mixed grid (default).
 - KMP shared-DTO module: still deferred (DTOs remain duplicated).
+- Feed refresh after a cold-start upload (found in the M13 journey, behaviour since v1): `postsChanged` has no replay,
+  so a post published by WorkManager right after launch shows only after a refresh. Default: leave until a milestone
+  touches the feed (M15), then expose a "stale" flag from the repository instead of an event.

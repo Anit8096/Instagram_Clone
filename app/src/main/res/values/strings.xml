@@ -108,10 +108,10 @@
     </plurals>
     <string name="upload_in_progress">Posting…</string>
     <plurals name="upload_in_progress_many">
-        <item quantity="one">Posting %1$d photo…</item>
-        <item quantity="other">Posting %1$d photos…</item>
+        <item quantity="one">Posting %1$d post…</item>
+        <item quantity="other">Posting %1$d posts…</item>
     </plurals>
-    <string name="upload_failed">Couldn\'t post your photo</string>
+    <string name="upload_failed">Couldn\'t share your post</string>
     <string name="action_discard">Discard</string>
 
     <!-- Post detail -->

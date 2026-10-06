@@ -131,6 +131,14 @@ class DefaultPostRepositoryTest {
     }
 
     @Test
+    fun `no photos or more than ten is a failure result, not a crash`() = runTest {
+        assertTrue(repository().createPost(emptyList(), "c").isFailure)
+        assertTrue(repository().createPost(uris(11), "c").isFailure)
+        assertTrue(compressor.written.isEmpty())
+        assertTrue(dao.all().isEmpty())
+    }
+
+    @Test
     fun `publish uploads every photo in order, creates the post, then removes the draft and files`() = runTest {
         val files = seedDraft(count = 3)
         val repo = repository()
