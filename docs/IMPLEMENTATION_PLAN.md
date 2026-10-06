@@ -1,364 +1,322 @@
-# Insta — v1 Implementation Plan
+# Insta — v2 Implementation Plan
 
-Source of truth for scope: the approved v1 spec (auth, profiles, single-photo posts, follows,
-chronological feed, likes, comments, 1:1 real-time DMs, in-app + FCM notifications, user search +
-explore, delete post/comment/account). Out of scope: stories, reels, carousels, private accounts,
-groups, blocking, password reset.
+Scope: `docs/SPEC.md` (v2, approved 2026-10-06).
+**In:** Redis infrastructure (job queue, rate limits, cache), carousels, video + HLS + Reels tab, photo stories,
+private accounts / block / mute, saved posts, comment replies + likes, hashtags + mentions, group DMs (≤ 16) and
+sharing posts into DMs, offline support for the new actions.
+**Out:** reporting/moderation, ranked explore, video stories, story replies, highlights, video trim, KMP/iOS, cloud
+hosting, real SMS provider, group admin roles.
 
-Versions were checked against Google Maven, Maven Central, and the Gradle Plugin Portal on **2026-10-04**.
+v1 (M1–M10) is complete; its plan is archived in `docs/v1/IMPLEMENTATION_PLAN.md`. Milestone numbering continues.
+Versions were checked against Google Maven, Maven Central and Docker Hub on **2026-10-06**.
 
 ## Status
 
 | Milestone | State | Notes |
 |---|---|---|
-| M1 Server foundation + auth | Done | 19 server tests; `docker compose up` verified |
-| M2 App foundation + auth | Done | 32 app unit tests; emulator journey `journeys/m2-auth.xml` passed |
-| M3 Media, posts, profile | Done | 33 server tests, 58 app unit tests, 2 instrumented DAO tests; journey `journeys/m3-posts.xml` passed |
-| M4 Follow, feed, search, explore | Done | 37 server tests, 69 app unit tests; journeys `m4-social.xml` + `m4-offline.xml` passed |
-| M5 Likes, comments, offline action queue | Done | 40 server tests, 74 app unit tests; journeys `m5-engagement.xml` + `m5-offline-queue.xml` passed |
-| M6 Real-time DMs | Done | 42 server tests, 77 app unit tests; journey `m6-dm.xml` passed |
-| M7 Notifications + FCM | Done | 44 server tests, 84 app unit tests; journey `m7-notifications.xml` passed (FCM delivery itself needs a Firebase project; see `docs/running-the-app.md`) |
-| M8 Account deletion, hardening, showcase | Done | 47 server tests, 88 app unit tests, 3 instrumented; journey `m8-account.xml` passed; CI workflow + README |
-| M9 Server: Google-first + phone OTP auth | Done | 51 server tests (all suites moved to Google + phone sign-up); live check on Docker: seeded phone sign-in, NO_LINKED_ACCOUNT, OTP_INVALID with attempts left, password endpoint 404 |
-| M10 App: Welcome, phone sign-in, onboarding, OTP flows | Done | 89 app unit tests (login/register tests replaced by Welcome, phone sign-in, onboarding, change phone, settings, repository and libphonenumber tests); lint 0 errors; journey `m10-phone-auth.xml` 16/16 including real Google sign-up |
-
-Changes from this plan made during M2:
-- Kotlin 2.4.20 is applied by putting `kotlin-gradle-plugin` on the root buildscript classpath (AGP 9 built-in Kotlin, per the AGP 9.0 release notes).
-- `koin-compose-navigation3` isn't used: single-module app, so entries call `koinViewModel()` inside the plain entryProvider DSL with `rememberViewModelStoreNavEntryDecorator`.
-- Main shell uses `NavigationSuiteScaffold` (bottom bar on phones, rail on wide windows).
-- Server 401 challenges now send `WWW-Authenticate: Bearer` (RFC 6750) so the Ktor client refreshes tokens.
-- Base URL / Google client ID come from a Gradle property or `local.properties` (see `docs/running-the-app.md`).
-
-Changes made during M3:
-- Posts are created with `PUT /api/v1/posts/{clientId}` (idempotent) instead of POST; the draft row's id is the post id.
-- Uploads are center-cropped to the 4:5…1.91:1 aspect range (server), and the client clamps the same range.
-- Room 3 (`androidx.room3`, KSP) with `AndroidSQLiteDriver`; schema export off for now (enable before the first migration in M4).
-- Upload drafts are cleared (and their work cancelled) on logout and on server-side session expiry.
-- The profile grid uses simple cursor paging in the ViewModel; Paging 3 + RemoteMediator arrives with the feed in M4.
-- No expedited work: regular WorkManager work with a network constraint (expedited needs a foreground notification below API 31).
-
-Changes made during M4:
-- Follow endpoints are keyed by username (`PUT|DELETE /users/{username}/follow`), not user id.
-- Explore is "recent posts from accounts you don't follow"; ranking by likes waits for likes (M5).
-- Room schema export is on (`app/schemas`, `androidx.room3` plugin); v1→v2 is an `@AutoMigration` (adds the feed cache).
-- Follow/unfollow updates the UI optimistically and reverts on failure; offline queuing of follows comes with the action queue in M5.
-- Material 3 Expressive components (e.g. `LoadingIndicator`) aren't public in material3 1.4.0 (BOM 2026.09.00); standard M3 used until a stable release exposes them.
+| M11 Server: Redis infrastructure (queue, rate limits, cache) | Not started | |
+| M12 Server: carousels (multi-media posts) | Not started | |
+| M13 App: carousels | Not started | |
+| M14 Server: video upload, FFmpeg/HLS, reels | Not started | |
+| M15 App: video, Reels tab, navigation change | Not started | |
+| M16 Server: stories | Not started | |
+| M17 App: stories | Not started | |
+| M18 Server: private accounts, block, mute, media access control | Not started | |
+| M19 App: privacy & safety | Not started | |
+| M20 Server: saved posts, replies, comment likes, hashtags, mentions | Not started | |
+| M21 App: saved, replies, hashtags, mentions | Not started | |
+| M22 Server: group DMs + shared posts | Not started | |
+| M23 App: group DMs + share sheet | Not started | |
 
 ---
 
-## 0. Toolchain & version catalog (do this first)
+## Toolchain & version catalog
 
-The template's **Kotlin 2.2.10 is too old**: Coil 3.6.3 needs Kotlin 2.4.x metadata, and
-kotlinx-serialization 1.11.0 needs stdlib ≥ 2.3.20. Bump everything together.
+Everything already in `gradle/libs.versions.toml` and `server/gradle/libs.versions.toml` stays as is (Kotlin 2.4.20,
+AGP 9.3.3, Compose BOM 2026.09.00, Ktor 3.6.0, Koin 4.2.2, Room 3.0.3, Exposed 1.5.0, Flyway 13.9.0, Testcontainers
+2.0.5, …). Locked items (Kotlin, AGP, Compose BOM, KSP, SDK levels) are **not** changed. New entries only:
 
 | Area | Artifact | Version |
 |---|---|---|
-| Kotlin (+ compose & serialization plugins) | `org.jetbrains.kotlin.*` | **2.4.20** |
-| KSP | `com.google.devtools.ksp` | 2.3.12 |
-| AGP | `com.android.application` | 9.4.1 (template 9.3.3 also fine) |
-| Compose BOM | `androidx.compose:compose-bom` | 2026.09.00 |
-| Navigation 3 | `androidx.navigation3:navigation3-runtime` / `-ui` | 1.2.0 |
-| Lifecycle | `lifecycle-runtime-compose`, `-viewmodel-compose`, `-viewmodel-navigation3` | 2.11.0 (template has 2.6.1) |
-| Room 3 | `androidx.room3:room3-runtime` / `-compiler` (KSP) / `-paging` / `-testing`, plugin `androidx.room3` | 3.0.3 |
-| Paging | `androidx.paging:paging-runtime`, `paging-compose` | 3.5.1 |
-| WorkManager | `androidx.work:work-runtime-ktx` | 2.12.0 |
-| DataStore | `androidx.datastore:datastore-preferences` | 1.2.1 |
-| Credentials | `androidx.credentials:credentials`, `credentials-play-services-auth` | 1.6.0 |
-| Google ID | `com.google.android.libraries.identity.googleid:googleid` | 1.2.1 |
-| Coil | `io.coil-kt.coil3:coil-compose`, `coil-network-ktor3` | 3.6.3 |
-| Koin | `io.insert-koin:koin-bom` → `koin-androidx-compose`, `koin-compose-navigation3`, `koin-ktor` | 4.2.2 |
-| Ktor (client + server) | `io.ktor:ktor-bom` | 3.6.0 |
-| kotlinx | `kotlinx-serialization-json` / `kotlinx-coroutines-*` | 1.11.0 / 1.11.0 |
-| Firebase | `firebase-bom` / plugin `com.google.gms.google-services` | 34.19.0 / 4.5.0 |
-| Exposed | `org.jetbrains.exposed:exposed-bom` (core, jdbc, java-time, json) | 1.5.0 — **packages are `org.jetbrains.exposed.v1.*`** |
-| Flyway | `flyway-core` + `flyway-database-postgresql` | 13.9.0 (needs JDK 17+) |
-| HikariCP / pg JDBC | `com.zaxxer:HikariCP` / `org.postgresql:postgresql` | 7.1.0 / 42.7.13 |
-| Testcontainers | `testcontainers-bom` → **`testcontainers-postgresql`** (renamed in 2.x) | 2.0.5 |
-| Firebase Admin | `com.google.firebase:firebase-admin` | 9.11.0 |
-| Images (server) | `net.coobird:thumbnailator` + `com.twelvemonkeys.imageio:imageio-jpeg` | 0.4.21 / 3.15.2 |
-| Password hashing | `com.password4j:password4j` (Argon2id, pure Java) | 1.8.4 — **removed in M9** |
-| Phone numbers (server, M9) | `com.googlecode.libphonenumber:libphonenumber` | 9.0.40 (checked 2026-10-05) |
-| Phone numbers (app, M10) | `io.michaelrocks:libphonenumber-android` | 9.0.40 (checked 2026-10-05) |
-| Logging | `logback-classic` / `timber` | 1.6.5 / 5.0.1 |
-| Testing | `app.cash.turbine:turbine` | 1.2.1 |
-
-**JDK:** 21 LTS for both builds; Docker image `eclipse-temurin:21-jre`.
-
-**Decision (changeable):** use **Room 3**, which is stable, coroutine-only, KSP-only, and modern
-enough to be worth showcasing. Fall back to Room 2.8.5 if Room 3 + RemoteMediator examples prove
-too thin.
+| Video playback (app) | `androidx.media3:media3-exoplayer`, `media3-exoplayer-hls` | 1.11.1 |
+| Video compression (app) | `androidx.media3:media3-transformer`, `media3-effect` | 1.11.1 |
+| Player UI (app) | `androidx.media3:media3-ui-compose` (`PlayerSurface`; controls are our own M3) | 1.11.1 |
+| Redis client (server) | `io.lettuce:lettuce-core` | 7.8.0.RELEASE |
+| Lettuce coroutines bridge (server) | `org.jetbrains.kotlinx:kotlinx-coroutines-reactive` | 1.11.0 (matches coroutines) |
+| Redis (compose + tests) | Docker image `redis` | 8.8-alpine (8.8.3) |
+| Redis in tests | Testcontainers `GenericContainer("redis:8.8-alpine")` — no extra module | 2.0.5 (existing BOM) |
+| FFmpeg (server image + CI) | distro package in `eclipse-temurin:21-jre` (Ubuntu 24.04) | 6.1.x |
+| Pager, link text (app) | `HorizontalPager` / `VerticalPager`, `LinkAnnotation` — compose-foundation from the BOM | BOM 2026.09.00 |
 
 ---
 
-## Repo layout
+## Repo / module layout
 
-Keep the existing Android project at the root. Add the server as an **independent Gradle build**.
+Unchanged shape: single Android module `app/` + independent server build `server/`. New packages:
 
 ```
-Insta/
-  app/                         existing Android module (com.android.insta)
-  server/                      Ktor server (own settings.gradle.kts, own wrapper)
-    src/main/kotlin/com/android/insta/server/
-      Application.kt  plugins/  auth/  users/  posts/  feed/  social/  chat/  notifications/  media/  db/
-    src/main/resources/db/migration/V1__init.sql ...
-    src/main/resources/openapi/documentation.yaml
-    Dockerfile
-  docker-compose.yml           postgres + server, volumes: pgdata, media
-  .env.example                 JWT secret, DB creds, FIREBASE_CREDENTIALS path
-  .github/workflows/ci.yml
-  docs/
+server/src/main/kotlin/com/android/insta/server/
+  redis/          RedisModule (Lettuce client, coroutines commands), RedisCache, RedisRateLimiter (Lua)
+  jobs/           Job, JobRepository (Postgres `jobs`), JobQueue (Redis Streams), JobDispatcher, JobWorkers, Reconciler
+  media/          + uploads/ (UploadSessions, UploadRoutes), video/ (VideoTranscoder, FfmpegTranscoder, HlsRoutes)
+  posts/          + PostMedia, reels routes
+  stories/        StoryRoutes, StoryService, StoryRepository
+  privacy/        Visibility (central rule), FollowRequests, Blocks, Mutes
+  social/         + saved, hashtags, mentions (TextParser)
+  chat/           + groups (members, system messages), shared posts
+server/src/main/resources/db/migration/V5__… onward
+docker-compose.yml   + redis service (AOF volume, healthcheck)
+
+app/src/main/java/com/android/insta/
+  core/media/     + video/ (VideoCompressor via Transformer, PlayerPool, AuthDataSource), ChunkedUploader
+  core/ui/        + MediaPager, LinkifiedText, VideoPlayer
+  feature/reels/  ReelsScreen, ReelsViewModel, data/
+  feature/stories/ StoryTray, StoryViewer, StoryViewModel, data/
+  feature/privacy/ BlockedAccounts, FollowRequests
+  feature/hashtag/ HashtagScreen
+  feature/chat/   + group/ (NewGroup, GroupInfo), share/ (ShareSheet)
 ```
 
-Android packages (single module), organized by feature:
-`core/{network,database,datastore,sync,designsystem,util}`, `feature/{auth,feed,post,profile,search,
-explore,chat,notifications,settings}`, `navigation/`, `di/`. Each feature has `data/` (repository,
-DTO↔entity mappers), `ui/` (Screen, ViewModel, UiState, events).
+Room DB goes v3 → v4 (M13) → v5 (M15) → v6 (M17) → v7 (M21) → v8 (M23): auto-migrations where possible, each with a
+`MigrationTestHelper` instrumented test.
 
 ---
 
 ## Milestones
 
-Each milestone ends **demoable and tested**. Server work comes before the matching app work.
+Every app milestone that adds a new screen flow starts with one **android-kmp-architect** pass (M13, M15, M17, M19,
+M21, M23) and ends with one **compose-reviewer** pass on `git diff master...HEAD`. Server milestones stay
+backward compatible (additive DTO fields), so each can merge on its own before its app milestone.
 
-### M1 — Server foundation + auth
-- Ktor app (Netty), plugins: ContentNegotiation (kotlinx), StatusPages (error envelope
-  `{error:{code,message,details}}`), CallLogging + CallId, CORS off, RateLimit (auth, writes),
-  Authentication (JWT), WebSockets, OpenAPI/Swagger at `/docs` from a static YAML.
-- DB: HikariCP → Flyway migrate on startup → Exposed. `V1__init.sql` contains the full spec schema
-  (users, refresh_tokens, media, posts, follows, likes, comments, conversations, messages,
-  conversation_reads, notifications, device_tokens) + `pg_trgm` extension + indexes.
-- Auth endpoints: `POST /auth/register`, `/auth/login`, `/auth/google` (verify ID token against
-  Google JWKS, `aud` = web client ID; link by email or create), `/auth/refresh` (rotate; reuse of a
-  revoked token → revoke the whole family), `/auth/logout`. Access JWT 15 min, refresh 30 days
-  (hashed in DB). Argon2id via password4j.
-- Koin in Ktor (`koin-ktor`) for repositories/services.
-- docker-compose: `postgres:17` with healthcheck, server depends_on healthy.
-- Tests: `testApplication` + Testcontainers Postgres base class; register/login/refresh/reuse cases.
+### M11 — Server: Redis infrastructure
+- **Compose:** `redis:8.8-alpine` with `appendonly yes`, volume `redisdata`, healthcheck; server `depends_on` it;
+  `REDIS_URL` in config and `.env.example`.
+- **RedisModule:** one Lettuce `RedisClient` + connection (Koin singletons), coroutines API, command timeout 1 s,
+  closed on `ApplicationStopping`.
+- **Job system** (transactional outbox):
+  - `V5__jobs.sql`: `jobs(id uuid v7, type, payload jsonb, status queued|running|done|dead, attempts, run_at,
+    last_error, created_at, updated_at)`.
+  - Services insert job rows **in the same transaction** as their data; after commit the `JobDispatcher` XADDs due
+    jobs to `insta:jobs:{type}`.
+  - Workers: XREADGROUP (group `workers`), handler per type, XACK on success; failure → `attempts+1`, exponential
+    `run_at` backoff, after 3 attempts `dead` + XADD to `insta:jobs:dlq`. XAUTOCLAIM picks up messages idle > 5 min.
+  - **Reconciler** every 30 s re-dispatches `queued` rows whose `run_at` has passed (covers delayed jobs, Redis
+    restarts and a down Redis).
+  - Concurrency per type from config (transcode = 2 later). A `noop` job type proves the pipeline in tests.
+- **Rate limiting:** `RedisRateLimiter` (fixed-window counter via a Lua script) behind Ktor's `RateLimit` plugin
+  (custom provider) for per-IP limits; OTP cooldown / hourly cap move from the current store to Redis keys
+  `rl:otp:{e164}:*`. Redis error → general limits allow, OTP limits refuse (`503 OTP_UNAVAILABLE`).
+- **Cache:** `Cache.getOrLoad(key, ttl, serializer)` + `invalidate(keys)`; keys `insta:v1:{entity}:{id}`; errors
+  log and fall through to Postgres. First users: public profile + counters (invalidated on follow/post changes).
+- **Health:** `/health` reports `redis: up|down` (status stays 200 when only Redis is down, `degraded=true`).
+- **Tests** (Testcontainers Postgres + Redis): outbox commit/rollback, retry → DLQ, XAUTOCLAIM recovery, reconciler
+  after Redis restart, rate limiter windows, OTP fail-closed / API fail-open with Redis stopped, cache invalidation.
+- **Demo / live check:** `docker compose up --build`, `/health` shows Redis; `docker compose stop redis` → API keeps
+  working, OTP send returns 503; restart → `noop` job queued meanwhile completes. No app change, no emulator journey.
 
-### M2 — App foundation + auth
-- Toolchain bump (§0); plugins: ksp, room3, serialization, google-services.
-- `InstaApp` with Koin; Ktor `HttpClient` (OkHttp engine) with ContentNegotiation, Auth plugin
-  (bearer + `refreshTokens{}` calling `/auth/refresh`), logging, base URL per build type
-  (`http://10.0.2.2:8080` debug via BuildConfig; cleartext allowed only in debug network config).
-- Token storage: DataStore (refresh token encrypted with an Android Keystore AES key).
-- Navigation 3: `NavDisplay` + `entryProvider { entry<Route.X> { ... } }`, `@Serializable` routes,
-  separate back stacks for logged-out/logged-in, bottom nav (Feed, Explore, Create, Notifications,
-  Profile) with one back stack per tab, `koinViewModel()` per entry
-  (`rememberViewModelStoreNavEntryDecorator`).
-- Screens: Login, Register, Google button (Credential Manager `GetGoogleIdOption`), Splash/session gate.
-- Tests: AuthViewModel (Turbine, fake repo); one Compose UI test for login validation.
+### M12 — Server: carousels
+- `V6__carousels.sql`: `media` gains `type`, `width`, `height`, `duration_ms`, `status` (existing rows `photo`,
+  `ready`); `post_media(post_id, position, media_id, PK(post_id, position))` filled from `posts.media_id`, then
+  `posts.media_id` dropped; `posts.kind` (`post` default) and `posts.status` (`published` default).
+- `PUT /posts/{clientId}` accepts `mediaIds: [1..10]` (still accepts the old single `mediaId`); all media owned by
+  the caller, unused, and photo-only until M14. The aspect ratio comes from the first item; later items are center
+  cropped to it on the server.
+- `PostDto` gains `media: [{id, type, url, thumbUrl, width, height}]`; existing `mediaUrl` / `thumbUrl` stay (first
+  item) so the v1 app keeps working.
+- Deleting a post deletes every media file after commit.
+- Tests: create 1/10/11 items, foreign media rejected, order kept, migration keeps old posts, delete cleans files.
+  OpenAPI updated.
 
-### M3 — Media, posts, profile
-- Server: `POST /media` (multipart, ≤10 MB, JPEG/PNG/WebP via magic bytes) → Thumbnailator:
-  apply EXIF orientation, re-encode JPEG (drops all metadata), 1080px + 320px → `MediaStorage`
-  (`LocalDiskMediaStorage`, root `/data/media`) → `GET /media/{id}/{full|thumb}` with long
-  Cache-Control + ETag. `POST/GET/DELETE /posts`, `GET /users/{username}`, `PATCH /me`,
-  `GET /users/{id}/posts` (cursor).
-- App: Photo Picker → client downscale/compress → **draft row in Room** → `PostUploadWorker`
-  (expedited, network constraint, exponential backoff; upload media then create post with a client
-  UUID → idempotent). "Posting…" banner observes WorkInfo. Profile screen (header + 3-col grid with
-  thumbs), Edit Profile (avatar reuses pipeline). Coil 3 with `coil-network-ktor3` sharing the
-  authed HttpClient, disk cache 250 MB.
+### M13 — App: carousels
+- Create: `PickMultipleVisualMedia(maxItems = 10)` (images only for now); horizontal strip to reorder/remove; a
+  single crop-ratio choice applied to every item.
+- Drafts: Room v4 `draft_items(draft_id, position, local_uri, uploaded_media_id)`; the upload worker uploads items
+  one by one (resumes from the first item without a media id), then creates the post with all ids.
+- Feed / post detail: `MediaPager` (`HorizontalPager` + dot indicator + "1/5" chip), double-tap like still works;
+  profile grid shows a carousel badge.
+- Tests: draft repository (resume after partial upload), ViewModel for picker limits/reorder, DTO mapping; Room
+  migration v3→v4 instrumented test. Journey `journeys/m13-carousel.xml` (post 3 photos, swipe in feed, kill the
+  app mid-upload → resumes).
 
-### M4 — Follow, feed, search, explore
-- Server: `PUT/DELETE /users/{id}/follow` (idempotent), followers/following lists, `GET /feed`
-  (keyset on `(created_at, id)`, posts from followees ∪ self; include `liked_by_me`, counts, author),
-  `GET /search/users?q=` (pg_trgm similarity + prefix on username/display_name),
-  `GET /explore` (non-followed authors; like count over the last 7 days, then recency).
-- App: Paging 3 `RemoteMediator` for feed + profile grid, writing to Room (`feed_items`,
-  `remote_keys`). **Network-first:** refresh on open and pull-to-refresh; when offline, show Room
-  pages + an offline banner. Empty feed → "Find people" CTA → Explore. Search with debounce (300 ms).
+### M14 — Server: video upload, FFmpeg / HLS, reels
+- **Resumable upload:** `POST /uploads {size, mimeType}` → `{id, chunkSize}`; `PUT /uploads/{id}` with
+  `Content-Range` (must continue at the current offset, idempotent re-send of the last chunk); `HEAD /uploads/{id}` →
+  `Upload-Offset`; `POST /uploads/{id}/complete {kind}` → media row `processing` + `transcode` job. `V7__video.sql`
+  adds `upload_sessions` and poster/HLS columns. Limits: `video/mp4`, ≤ 150 MB. A cleanup job expires sessions
+  after 24 h.
+- **Transcoding:** `VideoTranscoder` interface. `FfmpegTranscoder` runs `ffprobe` (duration ≤ 45.5 s, has a video
+  stream, rotation) and then one `ffmpeg` run producing HLS fMP4, 6 s segments, 1080p/720p/360p + `master.m3u8` +
+  poster JPEG, into `media/{id}/hls/`. The process has a timeout (3 min), is killed on cancellation, and its working
+  dir is removed on failure. 2 concurrent transcode workers.
+- **Posts:** media may be `video` once `ready`. A post whose media isn't ready yet is created with
+  `status=processing`; when the last media is ready the job flips it to `published` (and it appears in feeds).
+  After the final failure: `failed` + an in-app `media_failed` notification to the author.
+- **Reels:** `kind=reel` requires exactly one vertical video (9:16…4:5). `GET /reels?cursor` (newest published
+  reels, keyset paging), `GET /users/{username}/reels`. The home feed and explore exclude reels; profile posts
+  exclude reels.
+- **Serving:** `GET /media/{id}/hls/{file}` with a strict file-name whitelist (`master.m3u8`, `{rendition}/…`),
+  correct content types, `Cache-Control: immutable` for segments. Still public until M18.
+- **Docker / CI:** `apt-get install -y --no-install-recommends ffmpeg` in the runtime stage; CI installs ffmpeg for
+  server tests.
+- **Tests:** chunk protocol (out-of-order chunk 409, resume, re-send last chunk, size limit), job state machine with
+  a fake transcoder (ready / retry / dead → post failed + notification), reels validation and paging. Real-FFmpeg
+  test (small generated clip via `ffmpeg -f lavfi`) runs only when `ffmpeg` is on PATH (`assumeTrue`), always in CI.
 
-### M5 — Likes, comments, offline action queue
-- Server: `PUT/DELETE /posts/{id}/like`; `PUT /posts/{id}/comments/{clientId}` (idempotent create),
-  `GET` comments (cursor), `DELETE` own comment. Counters are updated in the same transaction.
-- App **action queue** (`pending_actions` table: id UUID, type, target_id, payload JSON, created_at,
-  attempts, state). `ActionQueue.enqueue()` applies an **optimistic local update** to Room, then
-  schedules a unique `SyncWorker` (APPEND_OR_REPLACE, network constraint) that drains FIFO.
-  Rules:
-  - Collapse opposites on the same target (like→unlike, follow→unfollow) before sending.
-  - 4xx (except 408/429) → mark failed, revert the optimistic state, surface a snackbar; 5xx/IO →
-    retry with backoff.
-  - Merging on network refresh: pending actions are re-applied over fresh server rows, so the UI
-    never "flickers back".
-- Comments sheet shows pending/failed comments with tap-to-retry.
+### M15 — App: video, Reels tab, navigation change
+- **Navigation:** tabs Feed · Explore · Create · Reels · Profile. Activity moves to a heart `BadgedBox` in the Home
+  top bar next to Messages; `insta://activity` and push taps still open it.
+- **Create:** picker allows video. Reel mode (single vertical video) or post mode (carousel with videos). Duration
+  > 45 s is rejected up front.
+- **Compression:** `VideoCompressor` (Media3 Transformer: H.264 1080p max, AAC, `Presentation` effect for crop to the
+  post ratio) inside the upload `CoroutineWorker` running as foreground (`dataSync` type, progress notification).
+- **ChunkedUploader:** 5 MB chunks, resumes with `HEAD` offset after process death; stored in the draft
+  (Room v5: `draft_items.type`, `duration_ms`, `compressed_path`, `upload_session_id`). Upload progress UI shows
+  "Compressing… / Uploading 40% / Processing…".
+- **Playback:** `PlayerPool` (max 3 ExoPlayer instances, released in `onStop`), HLS via `HlsMediaSource`; poster
+  shown until first frame; `VideoPlayer` composable with `PlayerSurface`, mute toggle, tap to pause.
+  - **Feed:** carousel videos autoplay muted only for the most visible item (≥ 60 %).
+  - **Reels tab:** `VerticalPager`, one playing page, next page preloaded, like/comment/profile overlay reusing
+    the engagement layer, plays on loop.
+- **Profile:** tabs Posts | Reels (grid of posters with play icon).
+- **Tests:** ReelsViewModel (paging, current page), upload state machine (compress → upload → complete with
+  resume), Room v4→v5 migration test, PlayerPool unit test (assignment/release logic behind an interface).
+  Journey `journeys/m15-reels.xml`: upload a reel (sample clip pushed via `adb push`), wait for processing, swipe
+  reels, Activity via the heart icon.
 
-### M6 — Real-time DMs
-- Server: `GET /conversations` (with unread count + last message), `POST /conversations` (get or
-  create by peer), `GET /conversations/{id}/messages` (cursor), `PUT .../messages/{clientId}`
-  (idempotent), `POST .../read`. WebSocket `/ws` (JWT in the header): a `ConnectionRegistry`
-  (userId → sessions) pushes `message.new`, `message.read`, `notification.new`, `badge`.
-  JSON frames with `type` discriminator (sealed class + kotlinx).
-- App: `RealtimeClient` (Ktor client WebSockets) bound to process lifecycle
-  (`ProcessLifecycleOwner`): connect when foregrounded and logged in; reconnect with jittered
-  backoff; re-auth on 401. Incoming events → Room → UI. Sending = queue action (M5) with optimistic
-  "sending…" bubble; WS ack or REST response flips it to sent. Inbox + Thread screens, seen receipt.
+### M16 — Server: stories
+- `V8__stories.sql`: `stories(id, author_id, media_id, created_at, expires_at)`, `story_views(story_id, viewer_id,
+  viewed_at, PK)`.
+- `POST /stories {mediaId}` (photo, ready, 9:16 crop on the server) → enqueues a delayed `story_expire` job at
+  `expires_at` (deletes rows + files). Every read filters `expires_at > now()`.
+- `GET /stories/tray` → users you follow + yourself with active stories, `hasUnseen`, unseen first then newest;
+  cached per viewer (`insta:v1:tray:{userId}`, TTL 60 s; own key invalidated on post/view).
+- `GET /users/{username}/stories`, `PUT /stories/{id}/view` (idempotent), `GET /stories/{id}/viewers` (author only,
+  paged), `DELETE /stories/{id}`.
+- Tests: expiry filter with a test clock, expire job deletes files, tray order + seen state, viewers author-only,
+  view idempotency, cache invalidation.
 
-### M7 — Notifications + FCM
-- Server: a notifications row is written in the same transaction as like/comment/follow/message
-  (no self-notifications; collapse repeated likes). `GET /notifications` (cursor),
-  `POST /notifications/read`, `PUT /me/devices/{token}`. A `PushSender` interface:
-  `FcmPushSender` (Firebase Admin, credentials from a mounted file) sends only when the user has no
-  live WS session; `NoopPushSender` when no credentials are configured, so the stack runs without
-  Firebase.
-- App: `FirebaseMessagingService` (token upload on refresh/login), notification channels, POST_NOTIFICATIONS
-  runtime permission (API 33+) requested contextually, deep links (`insta://post/{id}`,
-  `insta://chat/{id}`, `insta://user/{username}`) mapped to Nav3 back stacks. Notifications tab +
-  badge from WS.
+### M17 — App: stories
+- **Tray** (`LazyRow`) on top of the feed: "Your story" with an add badge, gradient ring for unseen, grey for seen;
+  cached in Room v6 (`story_tray`) for offline display.
+- **Add story:** photo picker → 9:16 crop preview → WorkManager upload (reuses the draft/upload pipeline).
+- **Viewer** (full-screen Nav3 entry): `HorizontalPager` across users, segmented progress bar (5 s per story),
+  tap left/right, hold to pause, swipe down to close, images prefetched with Coil. Views are sent through the
+  action queue (`story_view`). The author sees "Seen by N" → viewers bottom sheet; delete from the viewer.
+- **Tests:** StoryViewerViewModel (timer, next/prev across users, pause), tray repository (offline fallback), queue
+  type, Room v5→v6 migration. Journey `journeys/m17-stories.xml` (post a story as A, view as B, A sees B in viewers).
 
-### M8 — Account deletion, hardening, showcase
-- `DELETE /me` (re-auth required; cascades; deletes media files after commit; revokes tokens).
-  Settings screen: logout, delete account.
-- Seed script (`server/seed`) creating demo users/posts/follows/chats so a reviewer sees a living app.
-- Accessibility pass (content descriptions, 48dp, font scaling), empty/error/loading states everywhere,
-  dark theme.
-- CI (`.github/workflows/ci.yml`): job `server` (JDK 21, `./gradlew test` with Testcontainers on
-  ubuntu runner), job `android` (`./gradlew lint testDebugUnitTest assembleDebug`), ktlint + detekt.
-  A dummy `google-services.json` is generated in CI.
-- README: architecture diagram, offline-queue explainer, `docker compose up` quickstart, Firebase
-  setup steps, screenshots/GIF.
+### M18 — Server: private accounts, block, mute, media access control
+- `V9__privacy.sql`: `users.is_private`, `follow_requests(requester, target, created_at)`, `blocks(blocker,
+  blocked)`, `mutes(muter, muted, posts bool, stories bool)`.
+- **Central rule** `Visibility`: `canSeeContent(viewer, author)` = not blocked either way **and** (author public
+  **or** viewer follows **or** self); `canSeeProfile` = not blocked either way. Exposed as one SQL predicate
+  helper used by every query, plus a Kotlin check for single-item endpoints.
+- **Applied to:** profile posts/reels/stories, post detail, feed, explore, search, reels, story tray, hashtag pages
+  (M20), comments and likes lists (hide blocked users), notifications (no notifications between blocked users),
+  1:1 DMs (`403 BLOCKED`), and **media GETs**, which now require auth and check visibility (result cached
+  `insta:v1:vis:{viewer}:{media}`, 60 s; avatars allowed except across a block).
+- **Follow:** following a private account creates a request (`202 {state: "requested"}`), `DELETE` cancels it.
+  `GET /me/follow-requests`, `POST /me/follow-requests/{username}/approve|decline`. Notifications
+  `follow_request` / `follow_accepted`. `PATCH /me {isPrivate:false}` auto-approves pending requests.
+- **Block:** `PUT|DELETE /users/{username}/block`, `GET /me/blocked`; blocking removes follows + requests both ways
+  in one transaction and invalidates caches. **Mute:** `PUT /users/{username}/mute {posts, stories}`,
+  `DELETE` → feed, tray and reels filter muted users.
+- `UserDto` gains `isPrivate`, `followState` (none/requested/following), `isBlocked`, `isMuted`.
+- **Tests:** an endpoint × relationship matrix (self, follower, stranger→private, stranger→public, blocker,
+  blocked, muted) asserting visible/hidden/403 for every content endpoint and for media GETs; request lifecycle;
+  block side effects; auto-approve.
 
-### M9 — Server: Google-first sign-in + phone OTP (spec: `docs/SPEC.md`)
-Demoable at the end through Swagger / curl with `OTP_DEV_ECHO=true`; the app is untouched until M10 (it can't sign
-in with passwords any more in between, so M9 and M10 merge together).
-- **Migration `V4__phone_auth.sql`:** delete users without a phone (all existing local users; cascades their data),
-  add `phone_e164 VARCHAR(16) NOT NULL UNIQUE`, drop `password_hash` and the old password-or-Google check, make
-  `google_sub NOT NULL`. New table `otp_challenges` (id, phone_e164, purpose `login|onboarding|change_phone|delete_account`,
-  user_id nullable FK cascade, onboarding_subject nullable, code_hash, attempts, expires_at, consumed_at, created_at;
-  index `(phone_e164, created_at DESC)`).
-- **`auth/Phone.kt`:** `PhoneNumbers.normalize(raw)` → E.164 or `ValidationException("phone", …)` via libphonenumber
-  (`isValidNumber`).
-- **`auth/Otp.kt`:** `OtpService(db, sms, config, clock)` with `request(phone, purpose, userId?, subject?)` and
-  `verify(challengeId, code, purpose, userId?/subject?)`. HMAC-SHA256 hash keyed by the JWT secret, constant-time
-  compare, 5-minute expiry, 5 attempts, single use, 30 s cooldown and 5 per hour per number (`429 OTP_RATE_LIMITED`
-  with `retryAfter`). `SmsSender` interface + `LogSmsSender`; `OtpConfig(devEcho, …)` from env (`OTP_DEV_ECHO`).
-- **Onboarding token:** `TokenService` issues a 15-minute JWT of type `onboarding` with Google `sub`, email and name;
-  only the onboarding endpoints accept it.
-- **Endpoints** (under the existing auth rate limit):
-  - `POST /auth/google {idToken}` → `{type:"signed_in", auth}` for a linked account, else
-    `{type:"needs_onboarding", onboardingToken, suggestedUsername, displayName}`. The old email-linking branch goes.
-  - `POST /auth/phone/otp {phone}` → `404 NO_LINKED_ACCOUNT` for unknown numbers, else `{challengeId, expiresIn, resendIn, devCode?}`.
-  - `POST /auth/phone/verify {challengeId, code}` → `AuthResponse`.
-  - `POST /auth/onboarding/otp {onboardingToken, phone}` → `409 PHONE_IN_USE` if taken, else a challenge.
-  - `POST /auth/onboarding/complete {onboardingToken, challengeId, code, username, displayName}` → creates the user
-    (Google sub + verified phone) → `AuthResponse(isNewUser = true)`; `409 USERNAME_TAKEN` / `PHONE_IN_USE` re-checked.
-  - `POST /me/phone/otp {phone}` + `PUT /me/phone {challengeId, code}` (change phone; OTP to the new number).
-  - `POST /me/delete/otp` + `DELETE /me {challengeId, code}` or `{googleIdToken}` (replaces the password variant).
-- **Privacy:** new `MeDto` (UserDto + `phone`) for `/me` and auth responses only; `UserDto` (public) unchanged.
-- **Removed:** `/auth/register`, `/auth/login`, `PasswordHasher`/Argon2, `password4j`, password validation.
-- **Seeder:** demo users get `google_sub = "seed:<username>"` and `+1 555-0101`…`0106`, created through `UserRepository`.
-- **Tests:** `IntegrationTest.signUp(name)` helper (fake Google → onboarding OTP with dev echo → complete) replaces
-  every test's `register` helper. New: `OtpServiceTest` (hash, expiry, attempts, single use, cooldown, hourly cap,
-  purpose binding), `PhoneAuthRoutesTest` (no linked account, sign-in, wrong/expired/reused code),
-  `OnboardingRoutesTest` (needs-onboarding, phone in use, username taken, token type/expiry, then Google signs in),
-  `ChangePhoneTest`, `AccountDeletionTest` updated for OTP. OpenAPI, `.env.example` (`OTP_DEV_ECHO=true` for local), docs.
+### M19 — App: privacy & safety
+- Settings: "Private account" switch; "Blocked accounts" list with unblock.
+- Profile: lock placeholder ("This account is private") for non-followers, Follow / Requested / Following button
+  states, overflow menu: Block / Unblock (confirm dialog), Mute (posts / stories switches in a sheet).
+- Activity: "Follow requests" row → list with Confirm / Delete.
+- **Authenticated media:** Coil's network fetcher uses the authenticated Ktor client; ExoPlayer uses a
+  `ResolvingDataSource` that adds the current bearer token (refreshes on 401). A 403/404 on content shows
+  "Content unavailable".
+- Blocking purges that user's posts/stories from Room caches and closes an open 1:1 thread.
+- Tests: ProfileViewModel follow-state transitions (incl. revert on failure), follow requests VM, blocked list,
+  cache purge in repositories. Journey `journeys/m19-privacy.xml` (make A private, B requests, A approves, B sees
+  posts; A blocks B → B can't find A).
 
-### M10 — App: Welcome, phone sign-in, onboarding, OTP flows
-- **Dependency:** `libphonenumber-android` for validation, formatting and the country list.
-- **Auth navigation** (`AuthRoute`): `Welcome` (primary **Continue with Google**, secondary **Sign in with phone**),
-  `PhoneSignIn`, `OtpEntry(purpose, phone, challengeId)`, `Onboarding(onboardingToken, suggestedUsername, displayName)`.
-  Login/Register screens, their ViewModels and tests are deleted.
-- **Shared UI:** `PhoneNumberField` (country picker in a searchable M3 bottom sheet: flag, name, dial code; default
-  from the device region; formats as you type) and `OtpCodeField` (6 digits, one-time-code autofill hint, resend
-  countdown) under `core/ui`, reused by sign-in, onboarding, change phone and delete account.
-- **Data:** `AuthRepository` gets `signInWithGoogle` (→ SignedIn | NeedsOnboarding), `requestLoginOtp`
-  (→ challenge | NoLinkedAccount), `verifyLoginOtp`, `requestOnboardingOtp`, `completeOnboarding`; the session store
-  saves the user's own phone. `ProfileRepository` gets change phone; `deleteAccount` takes a challenge + code or a
-  Google token.
-- **Screens:** `WelcomeViewModel`, `PhoneSignInViewModel`, `OtpViewModel`, `OnboardingViewModel` (UDF like the rest);
-  "No linked account" shows a message with a **Continue with Google** action. Edit profile gets a **Phone** row →
-  change-phone sheet. Settings → Delete account becomes "Send code" + OTP, with the Google option kept.
-- **Without Google OAuth configured** the Welcome screen still shows phone sign-in (seeded accounts work) and explains
-  that creating an account needs Google.
-- **Tests:** ViewModel and repository unit tests for every new flow (phone validation, cooldown countdown, error
-  mapping for `NO_LINKED_ACCOUNT` / `PHONE_IN_USE` / `USERNAME_TAKEN` / `OTP_*`), phone utility tests; the old
-  login/register tests are removed. Journeys: seeded phone sign-in, unknown number, change phone, delete with OTP,
-  and Google onboarding (runs once the OAuth client IDs exist).
+### M20 — Server: saved posts, replies, comment likes, hashtags, mentions
+- `V10__social.sql`: `saved_posts(user_id, post_id, created_at)`, `comments.parent_id` + `reply_count`,
+  `comment_likes` + `comments.like_count`, `hashtags(id, tag unique)`, `post_hashtags`, `mentions(source_type,
+  source_id, user_id)`.
+- `PUT|DELETE /posts/{id}/save`, `GET /me/saved` (only yours; respects visibility at read time).
+- Replies: `PUT /posts/{id}/comments/{clientId}` gains `parentId` (must be a top-level comment of the same post);
+  `GET /comments/{id}/replies?cursor`. `PUT|DELETE /comments/{id}/like`. Deleting a parent deletes its replies.
+- `TextParser`: `#tag` (Unicode letters/digits/_, ≤ 30 per text, lower-cased) and `@username` (existing username
+  rules); run on caption/comment create. `GET /tags/{tag}/posts?cursor` (chronological, visibility-filtered),
+  `GET /tags/search?q=`.
+- Notifications `reply`, `comment_like`, `mention` (only if the target can see the content and isn't blocked).
+- Tests: parser cases, reply depth rule, counters, mention visibility, saved visibility after the author goes
+  private, tag paging.
+
+### M21 — App: saved, replies, hashtags, mentions
+- Save toggle on posts and reels (action queue `save`/`unsave`); own profile gets a Saved tab (only visible to you).
+- Comments: "View N replies" expanders, Reply sets the composer to reply mode with `@username ` prefilled; heart on
+  comments (queue `comment_like`); replies queued offline like comments.
+- `LinkifiedText` (`AnnotatedString` + `LinkAnnotation.Clickable`) for captions/comments: `#tag` → Hashtag screen,
+  `@user` → profile. Search gets Accounts | Tags tabs.
+- Room v7: cached saved flag, reply counts. Tests: comments VM (reply mode, expand, optimistic counts), text
+  linkifier, queue types, migration test. Journey `journeys/m21-social.xml`.
+
+### M22 — Server: group DMs + shared posts
+- `V11__groups.sql`: `conversations.kind`, `name`, `created_by`; `conversation_members(conversation_id, user_id,
+  role, joined_at, left_at, last_read_message_id)` filled from existing pairs and `conversation_reads`;
+  `messages.kind` (text/shared_post/system) + `shared_post_id`. A unique index keeps one `direct` conversation per
+  pair.
+- `POST /conversations/groups {name, usernames}` (2–15 others, total ≤ 16), `PATCH /conversations/{id} {name}`
+  (creator), `POST /conversations/{id}/members {usernames}` (any member, ≤ 16), `DELETE
+  /conversations/{id}/members/{username}` (self = leave, creator = remove). System messages for
+  create/add/leave/remove/rename.
+- Messages: `PUT /conversations/{id}/messages/{clientId}` accepts `sharedPostId`; the payload carries a post preview
+  only if the **reader** can see the post, else `unavailable`. Allowed for any member; 1:1 blocked → `403 BLOCKED`.
+- Inbox and unread counts per member; WebSocket and FCM fan out to active members; `group_added` notification.
+  `ConversationDto` gains `kind`, `name`, `members`, `hasBlockedMember` (for the warning).
+- Tests: member limits/roles, leave/remove, system messages, fan-out, unread per member, shared-post visibility per
+  reader, migration of existing 1:1 threads.
+
+### M23 — App: group DMs + share sheet
+- Inbox shows groups (stacked avatars, name). "New group": multi-select user search (≤ 15), name → create.
+- Thread: sender name + avatar on group messages, system message rows, shared-post bubble (tap → post/reel,
+  "unavailable" state), blocked-member warning banner.
+- Group info screen: rename (creator), members list, add members, remove (creator), leave.
+- Share sheet from post/reel overflow: recent conversations + search, multi-select send (queued offline as
+  `message` with `sharedPostId`).
+- Deep link `insta://conversation/{id}` (username links still work for 1:1). Room v8: conversation members cache.
+- Tests: group creation VM, group info VM permissions, share sheet send, queue payload, migration test.
+  Journey `journeys/m23-groups.xml` (A creates a group with B and C, shares a reel, C leaves).
 
 ---
 
 ## Secrets & setup checklist (you)
-- Google Cloud: OAuth **Web** client ID (used as `serverClientId` + server `aud`) and an Android
-  client with the debug keystore SHA-1.
-- Firebase project: `app/google-services.json` (gitignored) and a service-account JSON mounted into
-  the server container (gitignored; path in `.env`).
-- `.env` from `.env.example` (JWT secret ≥ 256-bit, DB password).
-- Recommend `git init` before M1, with a `.gitignore` covering the secrets above.
-- **M9/M10:** the Google OAuth client IDs above are now **required to create accounts** on a device (debug SHA-1:
-  `29:3E:29:C3:0F:DA:26:AD:89:B5:EC:D4:5C:9D:44:3B:81:B5:BC:70`). `OTP_DEV_ECHO=true` in `.env` for local demos only.
-  A real SMS provider (e.g. Twilio) is optional and later.
-- **M9:** existing local accounts are deleted by the V4 migration; run the seeder again afterwards. Old uploaded files
-  stay in the media volume until `docker volume rm insta_media` (optional).
+- Nothing new is required for M11–M13: `docker compose up --build` pulls Redis.
+- **M14+:** optional `ffmpeg` on the host (`winget install Gyan.FFmpeg`) to run the real-FFmpeg server tests
+  locally; without it they're skipped locally and run in CI.
+- **M15+:** sample vertical clips (≤ 45 s, MP4) on the emulator for journeys: `adb push clip.mp4
+  /sdcard/Movies/`. Give the emulator ≥ 4 GB RAM and enough disk for Transformer output.
+- Expect the server image to grow by roughly 100–150 MB with FFmpeg; `docker volume rm insta_media` resets media.
+- Existing secrets (Google OAuth client IDs, Firebase files, `.env`) are unchanged; add `REDIS_URL` to `.env` from
+  `.env.example` in M11.
 
 ## Verification (end of each milestone)
-1. `docker compose up --build` → `GET /health` OK, Swagger at `http://localhost:8080/docs`.
-2. `cd server && ./gradlew test` green (Testcontainers needs Docker running).
-3. `./gradlew testDebugUnitTest connectedDebugAndroidTest` green.
-4. Manual on emulator: the milestone's flow end to end, including **airplane-mode** checks from M4
-   onward (cached feed visible; like/comment/follow/DM queued, then synced after reconnect).
+1. `docker compose up --build` → `/health` OK (with `redis: up` from M11), Swagger at `/docs` updated.
+2. `cd server && ./gradlew test` green (Testcontainers Postgres + Redis; FFmpeg tests in CI).
+3. App: `./gradlew testDebugUnitTest lintDebug` green, lint 0 errors; `connectedDebugAndroidTest` when Room or UI
+   changed (every app milestone has a migration test).
+4. Emulator journey `journeys/mX-*.xml` + results with screenshots, including an airplane-mode step for every new
+   queued action.
+5. compose-reviewer on the branch diff; BLOCKER/MAJOR fixed.
+6. Status row + "Changes made during Mx" updated here; commit on the task branch, merge to master.
 
-## Remaining open items
-- Room 3 vs Room 2 (default: Room 3).
-- Explore "popular" window (default 7 days).
-- Whether to add a KMP shared-DTO module later (currently duplicated DTOs).
-- M9/M10 OTP parameters (defaults: 6 digits, 5 min expiry, 5 attempts, 30 s cooldown, 5 codes/hour/number).
-- M9/M10 SMS provider (default: log only; Twilio later behind `SmsSender`).
-- M9/M10 SMS Retriever auto-fill (default: not now; only with a real provider).
-
-Changes made during M5:
-- The offline action queue covers likes/unlikes and comments; follows stay direct and optimistic (revert on failure). DMs join the queue in M6.
-- Like/unlike for the same post collapse to the latest choice before sending (the endpoints are idempotent, so only the final state matters).
-- Comment lists aren't cached offline yet; only queued comments show while offline.
-- Explore ranking by likes is still deferred (keyset paging over a score needs a separate design).
-- DB v3 (`pending_actions`, `feed_posts.likedByMe`) via `@AutoMigration(2, 3)`, verified by upgrading the installed app on the emulator.
-
-Changes made during M6:
-- Threads are opened by peer username (`POST /conversations {username}` get-or-create); the inbox is reached from a Messages action in the Home top bar.
-- DMs reuse the M5 offline action queue (type `message`, idempotent `PUT /conversations/{id}/messages/{clientId}`).
-- The WebSocket is open only while signed in **and** foregrounded; background delivery is M7's FCM.
-- Message history loads the latest page (50); older pages and unread badges on the tab bar are not implemented yet.
-
-Changes made during M7:
-- DMs don't create activity rows (the inbox already tracks unread messages); they only push to offline recipients. The activity feed covers like, comment and follow.
-- Repeated like/follow by the same person collapses to one row (V3 partial unique indexes); unlike/unfollow removes it, and deleting a comment cascades its row.
-- Pushes are data-only messages built by the app (two channels: Messages, Activity; one notification per tag, e.g. per post or per sender). They're sent fire-and-forget after commit, only when the recipient has no live socket; tokens FCM reports as UNREGISTERED/INVALID_ARGUMENT are pruned.
-- Firebase is optional on both sides: the server uses `NoopPushSender` without `FIREBASE_CREDENTIALS_FILE`; the app applies the google-services plugin only when `app/google-services.json` exists.
-- Registration tokens (not the newer Firebase Installation IDs): both are co-supported and the Admin SDK targets tokens. On logout the token is deleted on the device (works even when the session already expired); the server prunes it on the next send.
-- Chat deep links use the peer's username (`insta://chat/{username}`) because threads are opened by username. Also `insta://activity`. A chat link builds Home › Inbox › Thread and replaces an already open thread.
-- Extra endpoints: `GET /notifications/unread-count`, `DELETE /me/devices/{token}`. Socket events: `notification.new` (with the unread count) and `badge`.
-- POST_NOTIFICATIONS is asked from a dismissible card on the Activity tab, not at startup.
-
-Changes made during M8:
-- `DELETE /me` takes `{password}` or, for Google-only accounts, a fresh `{googleIdToken}` for the same Google account. A failed re-auth is **403** `REAUTH_FAILED`, not 401, so clients don't mistake it for an expired token. Likes and comments on other people's posts are subtracted from their counters in the same transaction; media files are deleted after the commit; refresh tokens cascade, so every session dies.
-- Logout moved from the profile into a new Settings screen (Log out, Delete account), opened from the profile's "Settings" button.
-- Seed data is a Kotlin `main` (`server/.../seed/Seed.kt`) that goes through the real services and is idempotent: run it with `docker compose exec server java -cp "/app/lib/*" com.android.insta.server.seed.SeedKt` or `./gradlew seed`. Covered by `DemoSeederTest`.
-- CI runs the server tests (Testcontainers on the hosted runner) and Android `lintDebug testDebugUnitTest assembleDebug`. No dummy `google-services.json` is needed, because the google-services plugin is only applied when the file exists.
-- ktlint/detekt were **not** added: introducing them now would mean reformatting the whole codebase for little value. Android lint stays the static-analysis gate.
-- Accessibility: badge state on the Activity tab (M7), a labelled profile shortcut on Activity rows, and a check at 130 % font scale and in dark theme (the theme already followed the system setting with dynamic colour).
-
-Changes made during M9:
-- Demo numbers are `+1 201-555-0101`…`0106` rather than `+1 555-0101`: a US number needs an area code to pass libphonenumber validation, and the 555-01xx exchange keeps them fictional. `DemoSeederTest` asserts every seeded number validates.
-- The resend cooldown and hourly cap are **per number across all purposes** (one SMS budget per phone). A user who just finished onboarding and immediately asks for another code gets `429 OTP_RATE_LIMITED` with `retryAfter`; M10 shows the countdown.
-- Integration tests run with throttling relaxed (`relaxedOtp`); the real limits are covered with a movable test clock (`MutableClock` + `realOtp`).
-- `PATCH /me` also returns the private `MeDto`. Public `UserDto` is unchanged; a test asserts a public profile response contains no `phone`.
-- The old "link Google to an existing account with the same email" path is gone (no email accounts exist any more).
-- An invalid or expired onboarding token is `401 INVALID_ONBOARDING_TOKEN`; the app must restart Google sign-in. Onboarding codes are bound to the Google subject, login/change/delete codes to the account.
-- `OTP_DEV_ECHO` is passed through `docker-compose.yml` (default `false`) and set to `true` in `.env.example` for local demos.
-- The README and run instructions still describe passwords; they're updated with the app in M10, since M9 alone isn't merged.
-
-Changes made during M10:
-- No separate `OtpEntry` route: phone sign-in and onboarding are each one screen with two steps (number → code), and
-  change phone is its own screen (`DetailRoute.ChangePhone`). Keeping the challenge in the ViewModel avoids putting
-  it in the saved back stack. The shared pieces are `core/ui` `PhoneNumberField` (searchable M3 bottom-sheet country
-  picker, flag emoji from the region code) and `OtpStep` (6-digit field with the SMS-code autofill content type,
-  resend countdown, and the dev-echoed code shown only in debug builds).
-- On onboarding the username and name stay editable during the code step, so `USERNAME_TAKEN` (checked before the
-  code is consumed) only asks for a new username, not a new code.
-- `PhoneNumbers` interface (`LibPhoneNumbers` on device, a fake in ViewModel tests); the real metadata is tested
-  under Robolectric. The country defaults to the SIM/network country, then the locale.
-- The session stores the user's own phone (`SessionUser.phone`); Edit profile shows it formatted and follows the
-  session, so a change shows up immediately.
-- Removed: Login/Register screens and ViewModels, password field, email/password validation and their tests
-  (17 tests), and strings that only they used.
-- Google OAuth turned out to be configured in this environment, so the journey also covered real Google sign-up and
-  re-sign-in on the emulator.
+## Remaining open items (default chosen)
+- Rate-limit algorithm: fixed window (default) vs sliding window log.
+- HLS segment format: fMP4 (default) vs MPEG-TS.
+- Reels ordering: newest first (default); ranking stays out of scope with explore.
+- Story duration per photo: 5 s (default).
+- Visibility cache TTL for media: 60 s (default) — a just-blocked user may still load an already-seen media URL for
+  up to a minute.
+- Whether the profile Saved tab also lists saved reels: yes, mixed grid (default).
+- KMP shared-DTO module: still deferred (DTOs remain duplicated).

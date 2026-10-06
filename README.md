@@ -136,4 +136,4 @@ journeys/   Emulator journey scripts and results (screenshots)
 - **Account deletion** cascades through foreign keys, fixes counters on other people's posts and removes media files
   only after the transaction commits.
 
-See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the milestone plan and every deviation from it.
+See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the v2 milestone plan ([`docs/SPEC.md`](docs/SPEC.md)) and [`docs/v1/IMPLEMENTATION_PLAN.md`](docs/v1/IMPLEMENTATION_PLAN.md) for v1 and every deviation from it.

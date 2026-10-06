@@ -1,64 +1,96 @@
-# Spec — Google-first sign-in with phone + OTP (replaces email/password)
+# Spec — Insta v2
 
-Approved 2026-10-05. The v1 product spec is summarised in `IMPLEMENTATION_PLAN.md`; this spec changes only
-authentication and account identity.
+Approved 2026-10-06. v2 builds on the finished v1 app (M1–M10). v1 documents are archived in `docs/v1/`:
+the v1 plan (`docs/v1/IMPLEMENTATION_PLAN.md`) and the Google-first + phone OTP auth spec (`docs/v1/SPEC-auth.md`,
+still referenced from code comments as "docs/SPEC.md"). Everything v1 decided (stack, auth, offline model) stays
+unless this spec changes it.
 
 ## Summary
-- **Sign in with Google is the primary (and only) way to create an account.** A first-time Google user goes through
-  onboarding: username, display name and a phone number verified with an OTP. The account is created only after the
-  phone is verified.
-- **Phone + OTP is a sign-in method for existing accounts only.** It works for a number already verified on an
-  account. An unknown number returns **"No linked account"**; it never creates an account.
-- **Email/password is removed everywhere**: register and password login (app + server), password hashing, the
-  password column, and the Login/Register screens. Email remains only as Google's email on the account.
-- Every account therefore has: a Google identity (`google_sub`), a unique verified phone (E.164) and a username.
+- **Goal:** a deeper portfolio showcase — media pipelines, Redis-backed infrastructure, privacy rules everywhere,
+  richer real-time features.
+- **Platforms / hosting:** unchanged. Android only (single app module) + Ktor server in local Docker Compose.
 
-## Flows
-1. **Google, existing account:** Google → signed in.
-2. **Google, new user:** Google → **Complete your profile** (username, display name prefilled from Google, country
-   picker + phone) → OTP sent to that phone → code entered → account created → signed in.
-   - The phone must not be in use by another account ("This number is already linked to another account").
-3. **Phone sign-in:** Welcome → "Sign in with phone" → country picker + number →
-   - number linked to an account → OTP → code → signed in;
-   - no account → "No linked account. Sign in with Google to create one."
-4. **Change phone** (Edit profile): new number → OTP to the **new** number → replaces the old one.
-5. **Delete account** (Settings): "Send code" → OTP to the account's phone → enter code → deleted. Google
-   re-confirmation stays as an alternative.
+## In scope
+1. **Redis infrastructure** (Lettuce, coroutines)
+   - **Job queue** on Redis Streams: consumer groups, retries, dead-letter stream. Used for video transcoding,
+     story expiry and upload clean-up.
+   - **Rate limiting** in Redis: OTP limits and per-IP API limits.
+   - **Cache:** profiles, counters, story trays; TTL + explicit invalidation.
+2. **Carousels:** up to 10 items per post, photos and videos mixed; one aspect ratio per post (from the first item);
+   pager with indicator; videos inside carousels autoplay muted in the feed.
+3. **Video & Reels**
+   - Clips ≤ 45 s. The app compresses to 1080p H.264 with Media3 Transformer, then uploads with a resumable
+     chunked upload.
+   - The server transcodes with FFmpeg to HLS (3 renditions) + poster frame; playback with Media3 ExoPlayer.
+   - **A reel is a single vertical video post.** Reels appear only in the Reels tab (full-screen vertical swipe,
+     autoplay, preloading) and in a Reels grid on the profile — not in the home feed.
+4. **Navigation:** tabs become Feed · Explore · Create · **Reels** · Profile. Activity moves to a heart icon (with its
+   badge) in the Home top bar next to Messages.
+5. **Stories:** photo only, 24 h. Tray on top of the feed, viewer (tap / hold / swipe), seen state, viewers list for
+   the author. Expiry via a delayed job; reads also filter on expiry time.
+6. **Privacy & safety**
+   - **Private accounts:** follow requests (approve / decline); posts, reels and stories hidden from non-followers;
+     existing comments by a private user stay visible.
+   - **Block:** hides profiles, content, comments and likes both ways; removes follows and pending requests both
+     ways; stops 1:1 DMs. Both may stay in a shared group, with a warning.
+   - **Mute:** silently hides someone's posts and/or stories (and reels) from your feed, tray and Reels tab.
+7. **Social:** saved posts (private Saved grid on your profile); one level of comment replies + comment likes;
+   #hashtags and @mentions (tappable, hashtag page, mention notifications).
+8. **Group DMs:** up to 16 members; creator names the group; any member can add; members can leave; the creator can
+   remove and rename. Text messages + shared posts/reels. Sharing a post/reel into any DM (1:1 or group).
+   Read receipts stay 1:1 only.
+9. **Offline**
+   - The action queue gains: save/unsave, replies, comment likes, mute/unmute, story views, group messages,
+     shared-post messages.
+   - Carousel, reel and story uploads go through WorkManager (like v1 posts).
+   - Block and follow requests are online-only (optimistic, revert on failure).
 
-## OTP rules (server)
-- 6 digits, `SecureRandom`; stored only as an HMAC-SHA256 hash; expires after 5 minutes; single use;
-  at most 5 wrong attempts per code, then the code is dead.
-- Resend: 30 s cooldown per number, at most 5 codes per number per hour, plus a per-IP rate limit on the endpoints.
-- Every code is bound to a **purpose** (`login`, `onboarding`, `change_phone`, `delete_account`) and, where it
-  applies, to the user or onboarding session; a code for one purpose can't be used for another.
-- Delivery through a pluggable `SmsSender`. Default (local): the code is written to the server log. A real
-  provider (e.g. Twilio) can be added behind config later.
-- **Dev echo:** with `OTP_DEV_ECHO=true` (off by default; set in `.env.example` for local use only) the request
-  response also contains the code, so emulator journeys and demos don't need the logs.
+## Out of scope
+Reporting / moderation, ranked explore (stays "recent posts from accounts you don't follow"), video stories, story
+replies, highlights, in-app video trim, KMP / iOS, cloud hosting, a real SMS provider, group admin roles.
 
-## Phone numbers
-- Entry: country picker (flag, name, dial code; searchable; default = device region) + national number.
-- Validation and formatting with libphonenumber on both sides; stored and sent as E.164 (`+919876543210`).
-- Phone numbers are private: returned only in the signed-in user's own account data (`/me`, auth responses),
-  never in public profiles, search, followers, comments or chat payloads.
-
-## Data
-- Old local accounts are removed by the migration (they have no phone/Google identity). Demo seed accounts get a
-  synthetic Google identity (`seed:<username>`) and fictional numbers `+1 555-0101`…`0106`; they sign in by phone.
+## Data model (new or changed)
+| Area | Change |
+|---|---|
+| Media | `media` gains `type` (photo/video), `width`, `height`, `duration_ms`, `status` (pending/processing/ready/failed), poster + HLS paths |
+| Posts | `post_media` (post_id, position, media_id) replaces `posts.media_id`; `posts.kind` (post/reel); `posts.status` (processing/published/failed) |
+| Uploads | `upload_sessions` (resumable chunks: owner, size, received bytes, status, expires) |
+| Jobs | `jobs` table (type, payload, status, attempts, run_at, last_error) — Postgres is the source of truth, Redis Streams the transport |
+| Stories | `stories` (author, media, created_at, expires_at), `story_views` (story, viewer, viewed_at) |
+| Privacy | `users.is_private`, `follow_requests`, `blocks`, `mutes` (posts / stories flags) |
+| Social | `saved_posts`, `comments.parent_id` (one level) + `reply_count`, `comment_likes` + `like_count`, `hashtags`, `post_hashtags`, `mentions` |
+| Messaging | `conversations.kind` (direct/group), `name`, `created_by`; `conversation_members` (role creator/member, joined_at, left_at, last_read); `messages.kind` (text/shared_post/system), `shared_post_id` |
+| Notifications | new types: follow_request, follow_accepted, mention, reply, comment_like, group_added, media_failed |
 
 ## ASSUMPTIONS
-1. Usernames keep today's rules (3–30 chars, lowercase letters, digits, `.` and `_`); a suggestion is prefilled from
-   the Google email/name.
-2. Our own access/refresh tokens are unchanged; only how identity is proven changes.
-3. No SMS Retriever / auto-fill of codes until a real SMS provider exists.
-4. Google sign-up on a device needs the OAuth client IDs (Web + Android); without them only seeded accounts can sign
-   in (by phone).
+1. **Media access:** from the privacy milestone onward, media GETs require auth and check visibility (private/block),
+   cached in Redis for a short TTL; Coil and ExoPlayer send the bearer token. Until then v1's public UUID URLs stay.
+   Avatars stay visible to every signed-in user except across a block.
+2. **Redis down:** cache fails open (read Postgres); general rate limits fail open, OTP limits fail closed; uploads
+   are still accepted and a reconciler re-enqueues due `jobs` rows when Redis returns.
+3. **Transcoding:** HLS with fMP4 segments, 6 s, renditions 1080p / 720p / 360p; 2 concurrent transcodes; 3 retries,
+   then dead-letter and the post shows "Processing failed" to its author. A post is hidden until all its media is
+   ready; the author sees "Processing…".
+4. **Uploads:** our own chunked protocol (5 MB chunks, resume by offset), not tus. Max compressed clip ~150 MB.
+   Abandoned sessions expire after 24 h.
+5. **Hashtags / mentions** are parsed on the server and stored. Mentions only notify users who can see the content.
+   Hashtag pages are chronological.
+6. **Stories:** seen state per viewer in Postgres; tray order (unseen first) cached in Redis with a short TTL.
+7. **Going private** → pending requests show in Activity; switching back to public auto-approves pending requests.
+8. **Groups:** existing 1:1 conversations migrate to `kind=direct` with two members. The socket fans out to members;
+   no multi-instance pub/sub.
+9. **Mute** has separate posts and stories switches; muting posts also hides that person's reels in the Reels tab.
+10. **Reels** must be vertical (aspect 9:16 up to 4:5); carousel videos follow the post's aspect ratio (center crop).
 
 ## OPEN RISKS
-- **Account enumeration:** "No linked account" tells a caller whether a number is registered (explicitly requested).
-  Mitigated by per-IP and per-number rate limits.
-- **OTP abuse and SMS cost** once a real provider is used: attempt limits, cooldowns and hourly caps above.
-- **Phone recycling:** a number reassigned by a carrier could let its new owner sign in. Mitigation later: keep
-  Google as the primary method; optional re-verification after long inactivity (out of scope).
-- **Irreversible local data wipe** on migration (local dev data only).
-- **Google OAuth setup is now mandatory for sign-up** on a device.
+- **FFmpeg:** bigger Docker image, CPU-heavy transcodes, slow emulator journeys with video.
+- **Video testing:** real-FFmpeg server tests need `ffmpeg` on the test host (CI installs it); Transformer and
+  ExoPlayer are covered by instrumented tests and journeys, not unit tests.
+- **Visibility leaks:** privacy and blocks cut across every query (feed, explore, search, comments, likes,
+  notifications, DMs, stories, reels, media). Mitigation: one central visibility rule + an endpoint × relationship
+  test matrix.
+- **Retrofitting:** privacy lands after media and stories, so those features are revisited in the privacy milestone.
+- **Group DM migration** touches M6/M7 code: unread counts, pushes, deep links keyed by username.
+- **ExoPlayer memory:** the Reels pager needs a small player pool and preloading that fits low-RAM emulators.
+- **Cache drift:** counters and trays can briefly differ from Postgres; TTLs bound the staleness.
+- **Scope:** v2 is roughly twice v1 — 13 milestones.
