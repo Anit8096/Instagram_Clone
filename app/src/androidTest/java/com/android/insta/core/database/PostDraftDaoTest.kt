@@ -30,18 +30,34 @@ class PostDraftDaoTest {
     @After
     fun tearDown() = db.close()
 
-    private fun draft(id: String, createdAt: Long) = PostDraftEntity(id, "/files/$id.jpg", "caption $id", createdAt = createdAt)
+    private fun draft(id: String, createdAt: Long) = PostDraftEntity(id, "caption $id", createdAt = createdAt)
 
     @Test
     fun upsertReplacesAndObserveOrdersByCreation() = runTest {
         dao.upsert(draft("b", createdAt = 2))
         dao.upsert(draft("a", createdAt = 1))
-        dao.upsert(draft("b", createdAt = 2).copy(mediaId = "m1", state = DraftState.FAILED, error = "x"))
+        dao.upsert(draft("b", createdAt = 2).copy(state = DraftState.FAILED, error = "x"))
 
         val all = dao.observeAll().first()
         assertEquals(listOf("a", "b"), all.map { it.id })
-        assertEquals("m1", all.last().mediaId)
+        assertEquals("x", all.last().error)
         assertEquals(DraftState.FAILED, dao.get("b")?.state)
+    }
+
+    @Test
+    fun itemsKeepTheirOrderAndRememberUploadsPerPhoto() = runTest {
+        dao.upsertItems((2 downTo 0).map { DraftItemEntity("d", it, "/files/$it.jpg") } + DraftItemEntity("other", 0, "/o.jpg"))
+        dao.setItemMedia("d", 1, "m1")
+        assertEquals(listOf(0, 1, 2), dao.items("d").map { it.position })
+        assertEquals(listOf(null, "m1", null), dao.items("d").map { it.mediaId })
+
+        dao.clearItemMedia("d")
+        assertEquals(listOf(null, null, null), dao.items("d").map { it.mediaId })
+
+        dao.deleteItems("d")
+        assertEquals(listOf("other"), dao.allItems().map { it.draftId })
+        dao.deleteAllItems()
+        assertEquals(0, dao.allItems().size)
     }
 
     @Test

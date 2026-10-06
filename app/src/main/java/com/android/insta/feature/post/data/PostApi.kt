@@ -29,8 +29,8 @@ class PostApi(private val client: HttpClient) {
     }
 
     /** Idempotent: repeating the call with the same [id] returns the existing post. */
-    suspend fun createPost(id: String, mediaId: String, caption: String): ApiResult<PostDto> =
-        safeApiCall { client.put("api/v1/posts/$id") { jsonBody(CreatePostRequest(mediaId, caption)) } }
+    suspend fun createPost(id: String, mediaIds: List<String>, caption: String): ApiResult<PostDto> =
+        safeApiCall { client.put("api/v1/posts/$id") { jsonBody(CreatePostRequest(mediaIds, caption)) } }
 
     suspend fun getPost(id: String): ApiResult<PostDto> = safeApiCall { client.get("api/v1/posts/$id") }
 

@@ -10,6 +10,7 @@ import androidx.room3.OnConflictStrategy
 import androidx.room3.PrimaryKey
 import androidx.room3.Query
 import androidx.room3.paging.PagingSourceDaoReturnTypeConverter
+import com.android.insta.feature.post.data.PostMedia
 
 /** Cached home-feed row. [position] preserves server order across pages; URLs are already absolute. */
 @Entity(tableName = "feed_posts")
@@ -29,6 +30,8 @@ data class FeedPostEntity(
     val commentCount: Int,
     val createdAt: Long,
     @ColumnInfo(defaultValue = "0") val likedByMe: Boolean = false,
+    /** Carousel items; empty for rows cached before v4 (the cover fields above describe the only photo). */
+    @ColumnInfo(defaultValue = "'[]'") val media: List<PostMedia> = emptyList(),
 )
 
 /** Where the next feed page starts; a single row keyed by [list]. */

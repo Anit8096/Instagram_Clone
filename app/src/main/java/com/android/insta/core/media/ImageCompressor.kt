@@ -17,9 +17,28 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+data class CropRect(val left: Int, val top: Int, val width: Int, val height: Int)
+
+/** The largest centered [aspect] (width / height) rectangle inside a [width] x [height] image. */
+fun centerCropRect(width: Int, height: Int, aspect: Float): CropRect {
+    val current = width.toFloat() / height
+    return when {
+        current > aspect -> {
+            val w = (height * aspect).roundToInt().coerceIn(1, width)
+            CropRect((width - w) / 2, 0, w, height)
+        }
+        current < aspect -> {
+            val h = (width / aspect).roundToInt().coerceIn(1, height)
+            CropRect(0, (height - h) / 2, width, h)
+        }
+        else -> CropRect(0, 0, width, height)
+    }
+}
+
 /** Turns a picked image into an upload-ready JPEG file the app owns (survives the picker's URI grant). */
 interface ImageCompressor {
-    suspend fun compress(uri: Uri): File
+    /** With [aspect] (width / height), the image is center-cropped to that shape first. */
+    suspend fun compress(uri: Uri, aspect: Float? = null): File
 }
 
 /**
@@ -33,8 +52,9 @@ class AndroidImageCompressor(
     private val quality: Int = 90,
 ) : ImageCompressor {
 
-    override suspend fun compress(uri: Uri): File = withContext(Dispatchers.IO) {
-        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) decodeModern(uri) else decodeLegacy(uri)
+    override suspend fun compress(uri: Uri, aspect: Float?): File = withContext(Dispatchers.IO) {
+        val decoded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) decodeModern(uri) else decodeLegacy(uri)
+        val bitmap = aspect?.let { centerCrop(decoded, it) } ?: decoded
         val dir = File(context.filesDir, "drafts").apply { mkdirs() }
         val file = File(dir, "${UUID.randomUUID()}.jpg")
         try {
@@ -43,6 +63,13 @@ class AndroidImageCompressor(
             bitmap.recycle()
         }
         file
+    }
+
+    /** Recycles [source] when it returns a new bitmap. */
+    private fun centerCrop(source: Bitmap, aspect: Float): Bitmap {
+        val (left, top, width, height) = centerCropRect(source.width, source.height, aspect)
+        if (width == source.width && height == source.height) return source
+        return Bitmap.createBitmap(source, left, top, width, height).also { if (it !== source) source.recycle() }
     }
 
     // ImageDecoder honours EXIF orientation and can decode straight to the target size.

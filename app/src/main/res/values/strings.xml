@@ -72,14 +72,40 @@
 
     <!-- Create post -->
     <string name="create_title">New post</string>
-    <string name="action_choose_photo">Choose photo</string>
     <string name="action_change_photo">Change photo</string>
     <string name="action_remove">Remove</string>
     <string name="action_share">Share</string>
     <string name="field_caption">Write a caption…</string>
-    <string name="cd_selected_photo">Selected photo</string>
+    <string name="action_choose_photos">Choose photos</string>
+    <string name="action_add_photos">Add photos</string>
+    <string name="action_move_earlier">Move earlier</string>
+    <string name="action_move_later">Move later</string>
+    <string name="action_remove_all">Remove all</string>
+    <string name="cd_selected_photo_n">Photo %1$d of %2$d, selected</string>
+    <string name="cd_photo_n">Photo %1$d of %2$d</string>
+    <string name="crop_label">Crop</string>
+    <string name="crop_original">Original</string>
+    <string name="crop_square">1:1</string>
+    <string name="crop_portrait">4:5</string>
+    <string name="crop_landscape">1.91:1</string>
+    <string name="cd_crop_original">Original shape</string>
+    <string name="cd_crop_square">Square</string>
+    <string name="cd_crop_portrait">Portrait, 4 by 5</string>
+    <string name="cd_crop_landscape">Landscape, 1.91 by 1</string>
+    <string name="cd_post_photo_n">Photo %1$d of %2$d by %3$s</string>
+    <string name="carousel_position">%1$d/%2$d</string>
+    <string name="cd_carousel">Carousel post</string>
     <string name="error_caption_length">Captions can be at most 2,200 characters</string>
     <string name="error_image_unreadable">Couldn\'t read that photo. Try another one.</string>
+    <!-- Quantity is the maximum (10); the first argument is how many are chosen. -->
+    <plurals name="create_photo_count">
+        <item quantity="one">%1$d of %2$d photo</item>
+        <item quantity="other">%1$d of %2$d photos</item>
+    </plurals>
+    <plurals name="error_max_photos">
+        <item quantity="one">A post can have up to %1$d photo. Extra ones weren\'t added.</item>
+        <item quantity="other">A post can have up to %1$d photos. Extra ones weren\'t added.</item>
+    </plurals>
     <string name="upload_in_progress">Posting…</string>
     <plurals name="upload_in_progress_many">
         <item quantity="one">Posting %1$d photo…</item>

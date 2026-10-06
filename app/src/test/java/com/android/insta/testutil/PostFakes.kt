@@ -1,7 +1,9 @@
 package com.android.insta.testutil
 
 import android.net.Uri
+import com.android.insta.core.database.DraftItemEntity
 import com.android.insta.core.database.PostDraftDao
+import com.android.insta.feature.post.data.CropAspect
 import com.android.insta.core.database.PostDraftEntity
 import com.android.insta.core.media.ImageCompressor
 import com.android.insta.core.network.ApiResult
@@ -24,12 +26,25 @@ import java.time.Instant
 
 class FakeDraftDao : PostDraftDao {
     val rows = MutableStateFlow<Map<String, PostDraftEntity>>(emptyMap())
+    /** Keyed by draft id to position. */
+    val itemRows = mutableMapOf<Pair<String, Int>, DraftItemEntity>()
     override suspend fun upsert(draft: PostDraftEntity) { rows.value = rows.value + (draft.id to draft) }
     override suspend fun get(id: String) = rows.value[id]
     override fun observeAll(): Flow<List<PostDraftEntity>> = rows.map { it.values.sortedBy(PostDraftEntity::createdAt) }
     override suspend fun all() = rows.value.values.toList()
     override suspend fun delete(id: String) { rows.value = rows.value - id }
     override suspend fun deleteAll() { rows.value = emptyMap() }
+    override suspend fun items(draftId: String) = itemRows.values.filter { it.draftId == draftId }.sortedBy { it.position }
+    override suspend fun allItems() = itemRows.values.toList()
+    override suspend fun upsertItems(items: List<DraftItemEntity>) { items.forEach { itemRows[it.draftId to it.position] = it } }
+    override suspend fun setItemMedia(draftId: String, position: Int, mediaId: String) {
+        itemRows[draftId to position]?.let { itemRows[draftId to position] = it.copy(mediaId = mediaId) }
+    }
+    override suspend fun clearItemMedia(draftId: String) {
+        itemRows.replaceAll { _, item -> if (item.draftId == draftId) item.copy(mediaId = null) else item }
+    }
+    override suspend fun deleteItems(draftId: String) { itemRows.keys.removeAll { it.first == draftId } }
+    override suspend fun deleteAllItems() { itemRows.clear() }
 }
 
 class FakeScheduler : UploadScheduler {
@@ -39,11 +54,14 @@ class FakeScheduler : UploadScheduler {
     override fun cancelAll() { cancelled = true }
 }
 
-/** Writes a small file to [dir] instead of decoding the Uri. */
-class FakeCompressor(private val dir: File, var fail: Boolean = false) : ImageCompressor {
-    override suspend fun compress(uri: Uri): File {
-        if (fail) error("unreadable")
-        return File.createTempFile("draft", ".jpg", dir).apply { writeBytes(byteArrayOf(1, 2, 3)) }
+/** Writes a small file to [dir] instead of decoding the Uri. [failOn] makes only that Uri unreadable. */
+class FakeCompressor(private val dir: File, var fail: Boolean = false, var failOn: Uri? = null) : ImageCompressor {
+    val aspects = mutableListOf<Float?>()
+    val written = mutableListOf<File>()
+    override suspend fun compress(uri: Uri, aspect: Float?): File {
+        if (fail || uri == failOn) error("unreadable")
+        aspects += aspect
+        return File.createTempFile("draft", ".jpg", dir).apply { writeBytes(byteArrayOf(1, 2, 3)) }.also { written += it }
     }
 }
 
@@ -79,7 +97,10 @@ class FakePostRepository : PostRepository {
 
     override val pendingUploads: Flow<List<PendingUpload>> = pending
     override val postsChanged: SharedFlow<Unit> = changes
-    override suspend fun createPost(imageUri: Uri, caption: String): Result<Unit> { calls += "create:$caption"; return createResult }
+    override suspend fun createPost(imageUris: List<Uri>, caption: String, aspect: CropAspect): Result<Unit> {
+        calls += "create:${imageUris.size}:$aspect:$caption"
+        return createResult
+    }
     override suspend fun publishDraft(draftId: String): PublishOutcome { calls += "publish:$draftId"; return publishOutcome }
     override suspend fun markFailed(draftId: String, message: String) { calls += "failed:$draftId:$message" }
     override suspend fun retry(draftId: String) { calls += "retry:$draftId" }

@@ -1,5 +1,6 @@
 package com.android.insta.feature.explore.ui
 
+import com.android.insta.feature.post.ui.PostGridThumbnail
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -172,14 +173,7 @@ fun ExploreScreen(onUserClick: (String) -> Unit, onPostClick: (String) -> Unit, 
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     items(grid.itemCount, key = grid.itemKey { it.id }) { index ->
-                        grid[index]?.let { post ->
-                            AsyncImage(
-                                model = post.thumbUrl,
-                                contentDescription = post.caption.ifBlank { stringResource(R.string.cd_post_photo, post.authorUsername) },
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.aspectRatio(1f).clickable { onPostClick(post.id) },
-                            )
-                        }
+                        grid[index]?.let { post -> PostGridThumbnail(post, onClick = { onPostClick(post.id) }) }
                     }
                 }
             }

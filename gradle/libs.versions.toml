@@ -80,6 +80,7 @@ timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "tim
 androidx-room3-runtime = { group = "androidx.room3", name = "room3-runtime", version.ref = "room3" }
 androidx-room3-compiler = { group = "androidx.room3", name = "room3-compiler", version.ref = "room3" }
 androidx-room3-paging = { group = "androidx.room3", name = "room3-paging", version.ref = "room3" }
+androidx-room3-testing = { group = "androidx.room3", name = "room3-testing", version.ref = "room3" }
 androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", version.ref = "paging" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 androidx-paging-testing = { group = "androidx.paging", name = "paging-testing", version.ref = "paging" }

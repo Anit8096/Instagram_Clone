@@ -99,14 +99,14 @@ fun Post.toEntity(position: Int) = FeedPostEntity(
     postId = id, position = position, authorId = authorId, authorUsername = authorUsername,
     authorDisplayName = authorDisplayName, authorAvatarUrl = authorAvatarUrl, imageUrl = imageUrl, thumbUrl = thumbUrl,
     width = width, height = height, caption = caption, likeCount = likeCount, commentCount = commentCount,
-    createdAt = createdAt.toEpochMilli(), likedByMe = likedByMe,
+    createdAt = createdAt.toEpochMilli(), likedByMe = likedByMe, media = media,
 )
 
 fun FeedPostEntity.toPost() = Post(
     id = postId, authorId = authorId, authorUsername = authorUsername, authorDisplayName = authorDisplayName,
     authorAvatarUrl = authorAvatarUrl, imageUrl = imageUrl, thumbUrl = thumbUrl, width = width, height = height,
     caption = caption, likeCount = likeCount, commentCount = commentCount, createdAt = Instant.ofEpochMilli(createdAt),
-    likedByMe = likedByMe,
+    likedByMe = likedByMe, media = media,
 )
 
 /** Queued (unsent) like/unlike wins over the server's older view of the post. */

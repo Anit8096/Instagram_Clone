@@ -1,5 +1,6 @@
 package com.android.insta.feature.profile.ui
 
+import com.android.insta.feature.post.ui.PostGridThumbnail
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,12 +134,7 @@ fun ProfileContent(
                 }
             }
             items(state.posts, key = { it.id }) { post ->
-                AsyncImage(
-                    model = post.thumbUrl,
-                    contentDescription = post.caption.ifBlank { stringResource(R.string.cd_post_photo, post.authorUsername) },
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.aspectRatio(1f).clickable { onPostClick(post.id) },
-                )
+                PostGridThumbnail(post, onClick = { onPostClick(post.id) })
             }
             if (state.isLoadingMore || state.loadMoreError != null) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "footer") {

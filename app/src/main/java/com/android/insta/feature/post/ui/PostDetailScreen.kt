@@ -111,13 +111,7 @@ fun PostDetailContent(
                         Avatar(post.authorAvatarUrl, AvatarSmall)
                         Text(post.authorUsername, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     }
-                    AsyncImage(
-                        model = post.imageUrl,
-                        contentDescription = post.caption.ifBlank { stringResource(R.string.cd_post_photo, post.authorUsername) },
-                        contentScale = ContentScale.Crop,
-                        // Same 4:5…1.91:1 range the server crops to; guards against older/odd images.
-                        modifier = Modifier.fillMaxWidth().aspectRatio((post.width.toFloat() / post.height.coerceAtLeast(1)).coerceIn(0.8f, 1.91f)),
-                    )
+                    PostMediaView(post, onClick = null)
                     PostActions(post, onLikeClick = { onEvent(PostDetailEvent.ToggleLike) }, onCommentsClick = onCommentsClick)
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (post.caption.isNotBlank()) {

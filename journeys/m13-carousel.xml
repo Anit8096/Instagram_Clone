@@ -1,0 +1,21 @@
+<journey name="M13 Carousel posts in the app">
+   <description>
+      Fresh app data (pm clear); backend on the M12 server, seeded (each demo account's first post is a 3-photo
+      carousel); adb reverse tcp:8080. Three photos pushed to /sdcard/Pictures/m13 and media-scanned. Sign in by phone
+      as maya.travels (+1 201-555-0101); the code comes from the server log ("SMS to").
+   </description>
+   <actions>
+     <action>Sign in by phone as maya.travels; verify the Home feed is shown</action>
+     <action>Open Profile; verify the grid shows a carousel badge on the oldest post only</action>
+     <action>Open that post; verify a "1/3" chip and three position dots with the first one active</action>
+     <action>Swipe left on the photo; verify the chip shows "2/3", the second dot is active and a different photo is shown</action>
+     <action>Open Create and tap "Choose photos"; select three photos in the system picker and tap "Done"</action>
+     <action>Verify the strip shows 3 thumbnails with the first selected, "3 of 10 photos", "Move earlier" disabled and the "Original" crop selected</action>
+     <action>Select "1:1", select the third thumbnail and tap "Move earlier"; verify it is now second and still selected, and the preview is square</action>
+     <action>Enter the caption "m13 carousel journey"</action>
+     <action>Turn the device's network off and tap "Share"; verify the "Posting…" banner is shown and the upload waits for the network</action>
+     <action>Force-stop the app, turn the network on and launch the app again; verify the upload runs after the restart and the post exists on the server with 3 square items in the chosen order</action>
+     <action>Pull to refresh the Home feed; verify the new post is first, shows three position dots and its caption</action>
+     <action>Open Create with three photos including a mostly-white one; verify every thumbnail has a visible outline</action>
+   </actions>
+</journey>

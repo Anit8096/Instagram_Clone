@@ -35,7 +35,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-/** Feed item: author row, photo (aspect clamped to 4:5…1.91:1, like the server), caption and date. */
+/** Feed item: author row, photo or carousel (aspect clamped to 4:5…1.91:1, like the server), caption and date. */
 @Composable
 fun PostCard(
     post: Post,
@@ -54,15 +54,7 @@ fun PostCard(
             Avatar(post.authorAvatarUrl, AvatarSmall)
             Text(post.authorUsername, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         }
-        AsyncImage(
-            model = post.imageUrl,
-            contentDescription = post.caption.ifBlank { stringResource(R.string.cd_post_photo, post.authorUsername) },
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio((post.width.toFloat() / post.height.coerceAtLeast(1)).coerceIn(0.8f, 1.91f))
-                .clickable { onPhotoClick(post.id) },
-        )
+        PostMediaView(post, onClick = { onPhotoClick(post.id) })
         PostActions(post, onLikeClick, onCommentsClick)
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (post.caption.isNotBlank()) {
