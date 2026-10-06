@@ -63,7 +63,8 @@ fun Route.mediaServeRoutes() {
             "thumb" -> record.thumbPath
             else -> throw notFound()
         }
-        val etag = "\"$id-$variant\""
+        // From the file name: a carousel re-crop gives the display image a new file, so the tag changes with it.
+        val etag = "\"${key.substringAfterLast('/').substringBeforeLast('.')}\""
         call.response.header(HttpHeaders.ETag, etag)
         call.response.header(HttpHeaders.CacheControl, "public, max-age=31536000, immutable")
         if (call.request.headers[HttpHeaders.IfNoneMatch] == etag) {

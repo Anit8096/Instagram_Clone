@@ -308,7 +308,11 @@ paths:
       - { name: id, in: path, required: true, schema: { type: string, format: uuid }, description: Client-generated id }
     put:
       tags: [posts]
-      summary: Create a post (idempotent per client id)
+      summary: Create a post or carousel (idempotent per client id)
+      description: |
+        Send `mediaIds` (1–10 uploads with `kind=post`, in display order) or, for a single photo, `mediaId` — not
+        both. The first item is the cover and sets the post's shape: later items are center-cropped to its aspect
+        ratio. All-or-nothing: if any item is invalid nothing is attached.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -316,15 +320,16 @@ paths:
           application/json:
             schema:
               type: object
-              required: [mediaId]
               properties:
-                mediaId: { type: string, format: uuid }
+                mediaIds: { type: array, minItems: 1, maxItems: 10, items: { type: string, format: uuid } }
+                mediaId: { type: string, format: uuid, description: Single-photo form }
                 caption: { type: string, maxLength: 2200 }
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Post' } } } }
         '200': { description: Already existed (retry), content: { application/json: { schema: { $ref: '#/components/schemas/Post' } } } }
-        '409': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
+        '400': { description: 'VALIDATION_ERROR (details.mediaIds: none, more than 10, duplicates, both fields, bad id)' }
+        '409': { description: 'MEDIA_IN_USE (an item belongs to another post) or POST_ID_CONFLICT' }
+        '422': { description: 'INVALID_MEDIA (not your kind=post upload, or a video) or MEDIA_NOT_READY' }
     get:
       tags: [posts]
       summary: A post
@@ -539,10 +544,22 @@ components:
             username: { type: string }
             displayName: { type: string }
             avatarUrl: { type: string, nullable: true }
-        imageUrl: { type: string }
-        thumbUrl: { type: string }
-        width: { type: integer }
+        imageUrl: { type: string, description: Cover (first item) }
+        thumbUrl: { type: string, description: Cover (first item) }
+        width: { type: integer, description: Cover width; every item has the cover's aspect ratio }
         height: { type: integer }
+        media:
+          type: array
+          description: 1–10 items in display order
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              type: { type: string, enum: [photo, video] }
+              url: { type: string }
+              thumbUrl: { type: string }
+              width: { type: integer }
+              height: { type: integer }
         caption: { type: string }
         likeCount: { type: integer }
         commentCount: { type: integer }

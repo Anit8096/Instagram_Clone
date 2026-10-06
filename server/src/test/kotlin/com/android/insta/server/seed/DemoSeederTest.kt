@@ -4,6 +4,7 @@ import com.android.insta.server.db.DatabaseFactory
 import com.android.insta.server.db.Follows
 import com.android.insta.server.db.Media
 import com.android.insta.server.db.Messages
+import com.android.insta.server.db.PostMedia
 import com.android.insta.server.db.Posts
 import com.android.insta.server.db.Users
 import com.android.insta.server.di.appModule
@@ -33,7 +34,8 @@ class DemoSeederTest : IntegrationTest() {
                 assertEquals(18, Posts.selectAll().count())
                 assertEquals(18, Follows.selectAll().count())
                 assertEquals(3, Messages.selectAll().count())
-                assertEquals(24, Media.selectAll().count()) // 18 photos + 6 avatars
+                assertEquals(36, Media.selectAll().count()) // 18 posts, 6 of them 3-photo carousels (30 photos) + 6 avatars
+                assertEquals(30, PostMedia.selectAll().count())
                 assertTrue(Users.selectAll().all { it[Users.avatarMediaId] != null })
                 // Demo users sign in by phone, so every seeded number must pass the same validation as the API.
                 Users.selectAll().forEach { assertEquals(it[Users.phone], com.android.insta.server.auth.PhoneNumbers.normalize(it[Users.phone])) }

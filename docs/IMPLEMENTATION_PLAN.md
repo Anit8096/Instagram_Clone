@@ -15,7 +15,7 @@ Versions were checked against Google Maven, Maven Central and Docker Hub on **20
 | Milestone | State | Notes |
 |---|---|---|
 | M11 Server: Redis infrastructure (queue, rate limits, cache) | Done | 65 server tests (+14: 11 job runner, 3 Redis features); live check on Docker: health up/degraded, OTP 503 with Redis stopped, cache fail-open, a job made due during the outage ran ~33 s after Redis returned |
-| M12 Server: carousels (multi-media posts) | Not started | |
+| M12 Server: carousels (multi-media posts) | Done | 70 server tests (+5: 4 carousel routes, 1 V6 migration); live check on Docker: seeded 18 posts / 30 items, a 3-item carousel served at 1080x1350 per item, delete removed its 3 items |
 | M13 App: carousels | Not started | |
 | M14 Server: video upload, FFmpeg/HLS, reels | Not started | |
 | M15 App: video, Reels tab, navigation change | Not started | |
@@ -333,6 +333,24 @@ backward compatible (additive DTO fields), so each can merge on its own before i
 - No app change and no emulator journey (server only); compose-reviewer skipped for the same reason.
 - Compose: `redis:8.8-alpine` with AOF and a `redisdata` volume, `REDIS_URL` set for the server; `.env.example`
   documents `REDIS_URL` for running the server outside Docker.
+
+## Changes made during M12
+- `PostDto` keeps `imageUrl` / `thumbUrl` / `width` / `height` (the plan called them `mediaUrl` / `thumbUrl`) for the
+  cover, and adds `media: [{id, type, url, thumbUrl, width, height}]`. The app already decodes with
+  `ignoreUnknownKeys`, so the v1 app keeps working against this server.
+- `CreatePostRequest(mediaId, caption, mediaIds)`: `caption` stays the second field so existing callers compile;
+  sending both `mediaId` and `mediaIds` is a 400.
+- **Cropping:** items 2…n are center-cropped to the cover's ratio (1 % tolerance) into a **new** file
+  (`{id}_full_{w}x{h}.jpg`) before the transaction; the row is repointed inside it and the old file deleted after
+  commit (new files deleted on any failure, and on an idempotent retry). Media ETags now come from the file name, so a
+  re-cropped image gets a new tag. Thumbnails stay 320 px squares.
+- `post_media.media_id` is `ON DELETE CASCADE`: with a plain reference, deleting a user failed because Postgres
+  checked it before the posts cascade had removed the rows. Covered by `CarouselMigrationTest`, which also checks
+  that V6 turns an existing post into a one-item carousel.
+- Media gains `type` / `status` and posts `kind` / `status` (all defaults: photo, ready, post, published). Videos and
+  not-ready media are rejected for now (`INVALID_MEDIA`, `MEDIA_NOT_READY`) until M14.
+- Notifications take the post thumbnail from the cover (`post_media.position = 0`).
+- Demo seed: each account's first post is a 3-photo carousel (18 posts, 30 photos).
 
 ## Remaining open items (default chosen)
 - Rate-limit algorithm: fixed window (default) vs sliding window log.

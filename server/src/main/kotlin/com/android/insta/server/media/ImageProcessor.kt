@@ -12,6 +12,8 @@ import javax.imageio.ImageIO
 
 data class ProcessedImage(val full: ByteArray, val thumb: ByteArray, val width: Int, val height: Int)
 
+data class CroppedImage(val full: ByteArray, val width: Int, val height: Int)
+
 /**
  * Normalizes uploads: applies EXIF orientation, flattens transparency onto white and re-encodes to
  * JPEG. Re-encoding drops all metadata (GPS included). Produces a display image that fits 1080x1350
@@ -43,6 +45,30 @@ class ImageProcessor {
                 .outputFormat("jpg").outputQuality(THUMB_QUALITY).toOutputStream(it)
         }.toByteArray()
         return ProcessedImage(full, thumb, display.width, display.height)
+    }
+
+    /**
+     * Center-crops an already processed display image to [aspect] (width / height) for a carousel, whose items all
+     * share the cover's shape. Null when it's already within 1 % of it. The thumbnail is a square crop either way.
+     */
+    fun cropToAspect(display: ByteArray, aspect: Double): CroppedImage? {
+        val source = try {
+            ImageIO.read(ByteArrayInputStream(display)) ?: throw invalidImage()
+        } catch (e: ApiException) {
+            throw e
+        } catch (e: Exception) {
+            throw invalidImage()
+        }
+        val current = source.width.toDouble() / source.height
+        if (kotlin.math.abs(current - aspect) / aspect < ASPECT_TOLERANCE) return null
+        val cropped = if (current > aspect) {
+            val width = (source.height * aspect).toInt().coerceAtLeast(1)
+            source.getSubimage((source.width - width) / 2, 0, width, source.height)
+        } else {
+            val height = (source.width / aspect).toInt().coerceAtLeast(1)
+            source.getSubimage(0, (source.height - height) / 2, source.width, height)
+        }
+        return CroppedImage(encode(cropped, FULL_QUALITY), cropped.width, cropped.height)
     }
 
     /** Reads only the header so a tiny file claiming 50000x50000 px is rejected before decoding (decompression bombs). */
@@ -120,6 +146,7 @@ class ImageProcessor {
         private const val MAX_PIXELS = 60_000_000L
         const val MIN_ASPECT = 0.8 // 4:5 portrait
         const val MAX_ASPECT = 1.91 // landscape
+        private const val ASPECT_TOLERANCE = 0.01
 
         /** Identifies JPEG/PNG/WebP by magic bytes; never trust the client's Content-Type. */
         fun detectFormat(bytes: ByteArray): String? = when {

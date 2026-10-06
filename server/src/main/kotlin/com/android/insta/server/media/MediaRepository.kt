@@ -3,6 +3,8 @@ package com.android.insta.server.media
 import com.android.insta.server.db.Media
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.update
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
@@ -21,6 +23,22 @@ enum class MediaKind(val value: String) {
     }
 }
 
+enum class MediaType(val value: String) {
+    PHOTO("photo"), VIDEO("video");
+
+    companion object {
+        fun parse(raw: String) = entries.first { it.value == raw }
+    }
+}
+
+enum class MediaStatus(val value: String) {
+    PENDING("pending"), PROCESSING("processing"), READY("ready"), FAILED("failed");
+
+    companion object {
+        fun parse(raw: String) = entries.first { it.value == raw }
+    }
+}
+
 data class MediaRecord(
     val id: Uuid,
     val ownerId: Uuid,
@@ -29,6 +47,8 @@ data class MediaRecord(
     val thumbPath: String,
     val width: Int,
     val height: Int,
+    val type: MediaType = MediaType.PHOTO,
+    val status: MediaStatus = MediaStatus.READY,
 )
 
 class MediaRepository(private val db: Database) {
@@ -43,6 +63,8 @@ class MediaRepository(private val db: Database) {
                 it[thumbPath] = record.thumbPath
                 it[width] = record.width
                 it[height] = record.height
+                it[type] = record.type.value
+                it[status] = record.status.value
                 it[createdAt] = OffsetDateTime.now(ZoneOffset.UTC)
             }
         }
@@ -52,6 +74,20 @@ class MediaRepository(private val db: Database) {
 
     fun JdbcTransaction.findIn(id: Uuid): MediaRecord? =
         Media.selectAll().where { Media.id eq id }.singleOrNull()?.toMedia()
+
+    suspend fun findAll(ids: Collection<Uuid>): Map<Uuid, MediaRecord> = suspendTransaction(db) { findAllIn(ids) }
+
+    fun JdbcTransaction.findAllIn(ids: Collection<Uuid>): Map<Uuid, MediaRecord> =
+        if (ids.isEmpty()) emptyMap() else Media.selectAll().where { Media.id inList ids }.map { it.toMedia() }.associateBy { it.id }
+
+    /** Points the row at a replacement display image (e.g. re-cropped). The caller deletes the old file after commit. */
+    fun JdbcTransaction.replaceFullIn(id: Uuid, fullPath: String, width: Int, height: Int) {
+        Media.update({ Media.id eq id }) {
+            it[Media.fullPath] = fullPath
+            it[Media.width] = width
+            it[Media.height] = height
+        }
+    }
 
     /** Deletes the row inside the caller's transaction; returns its file keys for deletion after commit. */
     fun JdbcTransaction.deleteIn(id: Uuid): List<String> {
@@ -68,5 +104,7 @@ class MediaRepository(private val db: Database) {
         thumbPath = this[Media.thumbPath],
         width = this[Media.width],
         height = this[Media.height],
+        type = MediaType.parse(this[Media.type]),
+        status = MediaStatus.parse(this[Media.status]),
     )
 }

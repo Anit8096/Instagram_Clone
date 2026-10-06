@@ -93,9 +93,13 @@ class DemoSeeder(
         demo.forEach { user ->
             val author = ids.getValue(user.username)
             user.captions.forEachIndexed { index, caption ->
-                val upload = media.upload(author, MediaKind.POST, photo(user.hue + index * 0.07f))
+                // Each account's first post is a 3-photo carousel; the rest are single photos.
+                val count = if (index == 0) 3 else 1
+                val uploads = (0 until count).map { item ->
+                    media.upload(author, MediaKind.POST, photo(user.hue + index * 0.07f + item * 0.18f)).id.toString()
+                }
                 val postId = Uuid.random()
-                posts.create(author, postId, CreatePostRequest(upload.id.toString(), caption))
+                posts.create(author, postId, CreatePostRequest(caption = caption, mediaIds = uploads))
                 postIds += postId to user.username
             }
         }

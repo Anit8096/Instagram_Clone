@@ -10,6 +10,7 @@ import com.android.insta.server.common.pageRequest
 import com.android.insta.server.db.Comments
 import com.android.insta.server.db.DeviceTokens
 import com.android.insta.server.db.Notifications
+import com.android.insta.server.db.PostMedia
 import com.android.insta.server.db.Posts
 import com.android.insta.server.db.Users
 import com.android.insta.server.media.mediaUrl
@@ -196,6 +197,8 @@ class NotificationService(
     private fun joined() = Notifications
         .join(Users, JoinType.INNER, Notifications.actorId, Users.id)
         .join(Posts, JoinType.LEFT, Notifications.postId, Posts.id)
+        // The cover (first item) is the post's thumbnail.
+        .join(PostMedia, JoinType.LEFT, Posts.id, PostMedia.postId) { PostMedia.position eq 0 }
         .join(Comments, JoinType.LEFT, Notifications.commentId, Comments.id)
 
     private fun now() = OffsetDateTime.now(clock.withZone(ZoneOffset.UTC))
@@ -205,7 +208,7 @@ class NotificationService(
         type = this[Notifications.type],
         actor = AuthorDto(this[Users.id].toString(), this[Users.username], this[Users.displayName], this[Users.avatarMediaId]?.let { mediaUrl(it, "thumb") }),
         postId = this[Notifications.postId]?.toString(),
-        postThumbUrl = this.getOrNull(Posts.mediaId)?.let { mediaUrl(it, "thumb") },
+        postThumbUrl = this.getOrNull(PostMedia.mediaId)?.let { mediaUrl(it, "thumb") },
         commentId = this[Notifications.commentId]?.toString(),
         commentBody = this.getOrNull(Comments.body),
         read = this[Notifications.readAt] != null,

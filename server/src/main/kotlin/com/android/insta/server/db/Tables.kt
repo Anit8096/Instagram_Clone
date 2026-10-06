@@ -28,6 +28,9 @@ object Media : Table("media") {
     val thumbPath = varchar("thumb_path", 512)
     val width = integer("width")
     val height = integer("height")
+    val type = varchar("type", 8)
+    val durationMs = integer("duration_ms").nullable()
+    val status = varchar("status", 16)
     val createdAt = timestampWithTimeZone("created_at")
 
     override val primaryKey = PrimaryKey(id)
@@ -36,13 +39,23 @@ object Media : Table("media") {
 object Posts : Table("posts") {
     val id = uuid("id")
     val authorId = uuid("author_id")
-    val mediaId = uuid("media_id")
     val caption = varchar("caption", 2200)
     val likeCount = integer("like_count")
     val commentCount = integer("comment_count")
+    val kind = varchar("kind", 8)
+    val status = varchar("status", 16)
     val createdAt = timestampWithTimeZone("created_at")
 
     override val primaryKey = PrimaryKey(id)
+}
+
+/** A post's media items in display order (position 0 is the cover). */
+object PostMedia : Table("post_media") {
+    val postId = uuid("post_id")
+    val position = integer("position")
+    val mediaId = uuid("media_id")
+
+    override val primaryKey = PrimaryKey(postId, position)
 }
 
 object Follows : Table("follows") {
