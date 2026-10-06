@@ -19,6 +19,8 @@ import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
+import com.android.insta.server.redis.Cache
+import com.android.insta.server.users.invalidateCounts
 import java.time.Clock
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -68,12 +70,16 @@ class PostService(
     private val mediaRepository: MediaRepository,
     private val mediaService: MediaService,
     private val clock: Clock,
+    private val cache: Cache,
 ) {
     /**
      * `PUT /posts/{id}` with a client-generated id: retries (e.g. WorkManager after a timeout) return
      * the existing post instead of creating a duplicate.
      */
-    suspend fun create(authorId: Uuid, postId: Uuid, request: CreatePostRequest): CreateResult {
+    suspend fun create(authorId: Uuid, postId: Uuid, request: CreatePostRequest): CreateResult =
+        insert(authorId, postId, request).also { if (it.created) cache.invalidateCounts(authorId) }
+
+    private suspend fun insert(authorId: Uuid, postId: Uuid, request: CreatePostRequest): CreateResult {
         val caption = request.caption.trim()
         if (caption.length > CAPTION_MAX) throw ValidationException(mapOf("caption" to "At most $CAPTION_MAX characters"))
         val mediaId = runCatching { Uuid.parse(request.mediaId) }.getOrNull()
@@ -115,6 +121,7 @@ class PostService(
             with(mediaRepository) { deleteIn(post.mediaId) }
         }
         mediaService.deleteFiles(fileKeys) // only after the rows are really gone
+        cache.invalidateCounts(userId)
     }
 
     suspend fun byAuthor(viewerId: Uuid, authorId: Uuid, page: PageRequest): Page<PostDto> = toPage(viewerId, posts.byAuthor(authorId, page), page)

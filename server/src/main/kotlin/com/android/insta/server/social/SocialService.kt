@@ -31,6 +31,8 @@ import org.jetbrains.exposed.v1.jdbc.insertIgnore
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
+import com.android.insta.server.redis.Cache
+import com.android.insta.server.users.invalidateCounts
 import java.time.Clock
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -47,6 +49,7 @@ class SocialService(
     private val users: UserRepository,
     private val clock: Clock,
     private val notifications: NotificationService,
+    private val cache: Cache,
 ) {
 
     /** Idempotent: following twice is still "following". */
@@ -63,6 +66,7 @@ class SocialService(
             if (inserted > 0) recordNotification(target, followerId, NotificationType.FOLLOW, now) else null
         }
         notificationId?.let { notifications.deliver(it) }
+        cache.invalidateCounts(target, followerId)
         return FollowStateDto(true, followerCount(target))
     }
 
@@ -73,6 +77,7 @@ class SocialService(
             Follows.deleteWhere { (Follows.followerId eq followerId) and (followeeId eq target) }
             removeFollowNotification(followerId, target)
         }
+        cache.invalidateCounts(target, followerId)
         return FollowStateDto(false, followerCount(target))
     }
 

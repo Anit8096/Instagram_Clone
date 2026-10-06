@@ -11,17 +11,20 @@ import com.android.insta.server.auth.VerifyOtpRequest
 import com.android.insta.server.common.ApiException
 import com.android.insta.server.common.ValidationException
 import com.android.insta.server.db.Comments
+import com.android.insta.server.db.Follows
 import com.android.insta.server.db.Likes
 import com.android.insta.server.db.Media
 import com.android.insta.server.db.Posts
 import com.android.insta.server.db.Users
 import com.android.insta.server.media.MediaStorage
+import com.android.insta.server.redis.Cache
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.minus
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.select
@@ -42,6 +45,7 @@ class AccountService(
     private val otp: OtpService,
     private val google: GoogleTokenVerifier,
     private val storage: MediaStorage,
+    private val cache: Cache,
 ) {
     suspend fun requestDeleteOtp(userId: Uuid): OtpChallengeDto {
         val user = users.findById(userId) ?: throw accountGone()
@@ -72,9 +76,14 @@ class AccountService(
         val user = users.findById(userId) ?: throw accountGone()
         reauthenticate(user, request)
 
-        val fileKeys = suspendTransaction(db) {
+        val (fileKeys, peers) = suspendTransaction(db) {
             val keys = Media.select(Media.fullPath, Media.thumbPath).where { Media.ownerId eq userId }
                 .flatMap { listOf(it[Media.fullPath], it[Media.thumbPath]) }
+            // Everyone whose follower/following count drops when the follows cascade away.
+            val peers = Follows.select(Follows.followerId, Follows.followeeId)
+                .where { (Follows.followerId eq userId) or (Follows.followeeId eq userId) }
+                .map { if (it[Follows.followerId] == userId) it[Follows.followeeId] else it[Follows.followerId] }
+                .distinct()
 
             // Likes and comments on *other* people's posts: their posts lose the counts (own posts go away anyway).
             Likes.join(Posts, org.jetbrains.exposed.v1.core.JoinType.INNER, Likes.postId, Posts.id)
@@ -88,9 +97,10 @@ class AccountService(
                 .forEach { (postId, n) -> Posts.update({ Posts.id eq postId }) { it[commentCount] = commentCount - n } }
 
             Users.deleteWhere { Users.id eq userId }
-            keys
+            keys to peers
         }
         storage.delete(fileKeys)
+        cache.invalidateCounts(userId, *peers.toTypedArray())
     }
 
     private suspend fun reauthenticate(user: UserRecord, request: DeleteAccountRequest) {

@@ -11,11 +11,13 @@ data class AppConfig(
     val jwt: JwtConfig,
     val google: GoogleConfig,
     val rateLimit: RateLimitConfig,
+    val redis: RedisConfig,
     val mediaRoot: String,
     val maxUploadBytes: Long = 10L * 1024 * 1024,
     /** Firebase service-account JSON; null = push disabled (NoopPushSender). */
     val firebaseCredentialsFile: String? = null,
     val otp: OtpConfig = OtpConfig(),
+    val jobs: JobsConfig = JobsConfig(),
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -47,6 +49,7 @@ data class AppConfig(
                 rateLimit = RateLimitConfig(
                     authRequestsPerMinute = get("AUTH_RATE_LIMIT_PER_MINUTE", "20").toInt(),
                 ),
+                redis = RedisConfig(url = get("REDIS_URL", "redis://localhost:6379")),
                 mediaRoot = get("MEDIA_ROOT", "/data/media"),
                 maxUploadBytes = get("MAX_UPLOAD_MB", "10").toLong() * 1024 * 1024,
                 firebaseCredentialsFile = get("FIREBASE_CREDENTIALS_FILE", "").ifBlank { null },
@@ -72,6 +75,25 @@ data class GoogleConfig(val clientIds: List<String>) {
 }
 
 data class RateLimitConfig(val authRequestsPerMinute: Int)
+
+/**
+ * Redis is an accelerator, not a source of truth: every command fails fast after [timeout] (also while disconnected),
+ * and each caller decides whether to fail open (cache, API rate limits) or closed (OTP limits).
+ */
+data class RedisConfig(val url: String, val timeout: Duration = 1.seconds)
+
+/**
+ * Background jobs. [reconcileInterval] is how often due rows are (re-)published to Redis, so it is also the
+ * precision of delayed jobs. A running job whose worker went silent for [staleAfter] is queued again.
+ */
+data class JobsConfig(
+    val workersEnabled: Boolean = true,
+    val reconcileInterval: Duration = 30.seconds,
+    val redispatchAfter: Duration = 60.seconds,
+    val staleAfter: Duration = 5.minutes,
+    val retryBase: Duration = 10.seconds,
+    val blockTimeout: Duration = 2.seconds,
+)
 
 /**
  * One-time codes. [devEcho] returns the code in the API response, which is for local demos and tests only: anyone

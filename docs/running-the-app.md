@@ -7,6 +7,11 @@ cp .env.example .env      # once; fill in DATABASE_PASSWORD and JWT_SECRET
 docker compose up --build -d
 ```
 
+This starts Postgres, Redis and the server. `curl localhost:8080/health` shows `"redis": "up"`. If Redis is stopped
+(`docker compose stop redis`) the server keeps serving in a degraded mode: sign-in codes can't be sent
+(`503 OTP_UNAVAILABLE`), caches and API rate limits are skipped, and background jobs wait in Postgres until
+`docker compose start redis`.
+
 ## 2. Start an emulator (Android CLI)
 
 ```sh

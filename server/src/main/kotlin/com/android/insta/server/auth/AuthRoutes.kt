@@ -1,8 +1,7 @@
 package com.android.insta.server.auth
 
-import com.android.insta.server.plugins.AUTH_RATE_LIMIT
+import com.android.insta.server.plugins.authRateLimited
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -14,7 +13,7 @@ fun Route.authRoutes() {
     val auth by inject<AuthService>()
 
     route("/auth") {
-        rateLimit(AUTH_RATE_LIMIT) {
+        authRateLimited {
             post("/google") {
                 call.respond<GoogleAuthResult>(auth.loginWithGoogle(call.receive<GoogleLoginRequest>()))
             }

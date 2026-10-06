@@ -14,7 +14,7 @@ Versions were checked against Google Maven, Maven Central and Docker Hub on **20
 
 | Milestone | State | Notes |
 |---|---|---|
-| M11 Server: Redis infrastructure (queue, rate limits, cache) | Not started | |
+| M11 Server: Redis infrastructure (queue, rate limits, cache) | Done | 65 server tests (+14: 11 job runner, 3 Redis features); live check on Docker: health up/degraded, OTP 503 with Redis stopped, cache fail-open, a job made due during the outage ran ~33 s after Redis returned |
 | M12 Server: carousels (multi-media posts) | Not started | |
 | M13 App: carousels | Not started | |
 | M14 Server: video upload, FFmpeg/HLS, reels | Not started | |
@@ -310,6 +310,29 @@ backward compatible (additive DTO fields), so each can merge on its own before i
    queued action.
 5. compose-reviewer on the branch diff; BLOCKER/MAJOR fixed.
 6. Status row + "Changes made during Mx" updated here; commit on the task branch, merge to master.
+
+## Changes made during M11
+- **Rate limiting** uses a small route-scoped plugin (`Route.rateLimited` / `authRateLimited`) instead of a custom
+  provider for Ktor's `RateLimit`; the `ktor-server-rate-limit` dependency is gone. 429s now carry `Retry-After`.
+- **OTP limits** are a sliding log per number (sorted set + Lua) using the injected `Clock`, not Redis TTLs, so the
+  existing `MutableClock` tests of the cooldown and hourly cap still apply unchanged. The Postgres look-up of recent
+  codes was removed.
+- **XAUTOCLAIM** only acknowledges entries left pending by dead consumers; re-running their jobs is the Postgres
+  side's job (`requeueStale` + re-dispatch). That keeps one path for "run this again".
+- **Recurring jobs** (`JobRegistration.every`) and a `dedupe_key` (partial unique index on active rows) were added.
+  The first one is an hourly `maintenance` job (expired OTP codes > 1 day, finished jobs > 7 days), which replaces
+  the planned `noop` type for the live check.
+- **Cache** covers profile counters only (posts / followers / following, 5 min TTL), keyed by user id. The user row
+  itself is a cheap indexed read and isn't cached. Invalidated by follow/unfollow (both users), post create/delete
+  and account deletion (the user and everyone they followed or were followed by).
+- **Bug found in the live check:** a fixed client-wide Lettuce timeout (`TimeoutOptions.enabled(1s)`) overrode the
+  longer timeout of the blocking stream connections, so `XREADGROUP BLOCK 2s` timed out and an entry delivered
+  during an abandoned read waited for the reconciler (~1 min). Timeouts now come from each connection's `RedisURI`;
+  covered by `a worker's blocking read outlasts the regular command timeout` (fails on the old setting).
+- The runner stops on `ApplicationStopPreparing`, before Koin closes Redis, so shutdown is quiet.
+- No app change and no emulator journey (server only); compose-reviewer skipped for the same reason.
+- Compose: `redis:8.8-alpine` with AOF and a `redisdata` volume, `REDIS_URL` set for the server; `.env.example`
+  documents `REDIS_URL` for running the server outside Docker.
 
 ## Remaining open items (default chosen)
 - Rate-limit algorithm: fixed window (default) vs sliding window log.

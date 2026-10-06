@@ -145,3 +145,20 @@ object DeviceTokens : Table("device_tokens") {
 
     override val primaryKey = PrimaryKey(fcmToken)
 }
+
+object Jobs : Table("jobs") {
+    val id = uuid("id")
+    val type = varchar("type", 64)
+    val payload = text("payload")
+    val status = varchar("status", 16)
+    val attempts = integer("attempts")
+    val maxAttempts = integer("max_attempts")
+    val runAt = timestampWithTimeZone("run_at")
+    val dedupeKey = varchar("dedupe_key", 128).nullable()
+    val dispatchedAt = timestampWithTimeZone("dispatched_at").nullable()
+    val lastError = text("last_error").nullable()
+    val createdAt = timestampWithTimeZone("created_at")
+    val updatedAt = timestampWithTimeZone("updated_at")
+
+    override val primaryKey = PrimaryKey(id)
+}

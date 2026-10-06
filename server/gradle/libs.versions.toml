@@ -13,6 +13,8 @@ twelvemonkeys = "3.15.2"
 testcontainers = "2.0.5"
 junit = "5.13.4"
 firebase-admin = "9.11.0"
+lettuce = "7.8.0.RELEASE"
+coroutines = "1.11.0"
 
 [libraries]
 ktor-bom = { module = "io.ktor:ktor-bom", version.ref = "ktor" }
@@ -25,7 +27,6 @@ ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging" }
 ktor-server-call-id = { module = "io.ktor:ktor-server-call-id" }
 ktor-server-auth = { module = "io.ktor:ktor-server-auth" }
 ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt" }
-ktor-server-rate-limit = { module = "io.ktor:ktor-server-rate-limit" }
 ktor-server-websockets = { module = "io.ktor:ktor-server-websockets" }
 ktor-server-swagger = { module = "io.ktor:ktor-server-swagger" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host" }
@@ -49,6 +50,9 @@ logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 thumbnailator = { module = "net.coobird:thumbnailator", version.ref = "thumbnailator" }
 twelvemonkeys-jpeg = { module = "com.twelvemonkeys.imageio:imageio-jpeg", version.ref = "twelvemonkeys" }
 twelvemonkeys-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
+lettuce = { module = "io.lettuce:lettuce-core", version.ref = "lettuce" }
+# Lettuce's coroutines API is built on its reactive one.
+kotlinx-coroutines-reactive = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-reactive", version.ref = "coroutines" }
 firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebase-admin" }
 
 testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }

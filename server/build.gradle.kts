@@ -22,6 +22,7 @@ kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_21
         optIn.add("kotlin.uuid.ExperimentalUuidApi")
+        optIn.add("io.lettuce.core.ExperimentalLettuceCoroutinesApi")
     }
 }
 
@@ -36,7 +37,6 @@ dependencies {
     implementation(libs.ktor.server.call.id)
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.auth.jwt)
-    implementation(libs.ktor.server.rate.limit)
     implementation(libs.ktor.server.websockets)
     implementation(libs.ktor.server.swagger)
 
@@ -54,6 +54,9 @@ dependencies {
     implementation(libs.hikari)
     runtimeOnly(libs.postgresql)
     implementation(libs.libphonenumber)
+    // Redis: job queue (Streams), rate limits, cache.
+    implementation(libs.lettuce)
+    implementation(libs.kotlinx.coroutines.reactive)
     implementation(libs.thumbnailator)
     // FCM push (FcmPushSender); unused at runtime unless FIREBASE_CREDENTIALS_FILE is set.
     implementation(libs.firebase.admin)

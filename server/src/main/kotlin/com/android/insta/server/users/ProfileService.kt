@@ -3,6 +3,7 @@ package com.android.insta.server.users
 import com.android.insta.server.common.ApiException
 import com.android.insta.server.common.ValidationException
 import com.android.insta.server.db.Follows
+import com.android.insta.server.db.Posts
 import com.android.insta.server.db.Users
 import com.android.insta.server.media.MediaKind
 import com.android.insta.server.media.MediaRepository
@@ -15,7 +16,9 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.suspendTransaction
 import org.jetbrains.exposed.v1.jdbc.update
-import com.android.insta.server.posts.PostRepository
+import com.android.insta.server.redis.Cache
+import com.android.insta.server.redis.RedisKeys
+import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
 @Serializable
@@ -40,20 +43,26 @@ data class UpdateProfileRequest(
 class ProfileService(
     private val db: Database,
     private val users: UserRepository,
-    private val posts: PostRepository,
     private val mediaRepository: MediaRepository,
     private val mediaService: MediaService,
+    private val cache: Cache,
 ) {
     suspend fun profile(viewerId: Uuid, username: String): ProfileDto {
         val user = users.findByUsername(username.trim().lowercase()) ?: throw notFound()
-        val (followers, following) = suspendTransaction(db) {
-            Follows.selectAll().where { Follows.followeeId eq user.id }.count() to
-                Follows.selectAll().where { Follows.followerId eq user.id }.count()
+        // The three counts are the expensive part; writers invalidate them (see invalidateCounts).
+        val counts = cache.getOrLoad(RedisKeys.counts(user.id), COUNTS_TTL, ProfileCounts.serializer()) {
+            suspendTransaction(db) {
+                ProfileCounts(
+                    posts = Posts.selectAll().where { Posts.authorId eq user.id }.count(),
+                    followers = Follows.selectAll().where { Follows.followeeId eq user.id }.count(),
+                    following = Follows.selectAll().where { Follows.followerId eq user.id }.count(),
+                )
+            }
         }
         val isFollowing = viewerId != user.id && suspendTransaction(db) {
             Follows.selectAll().where { (Follows.followerId eq viewerId) and (Follows.followeeId eq user.id) }.limit(1).any()
         }
-        return ProfileDto(user.toDto(), posts.countByAuthor(user.id), followers, following, viewerId == user.id, isFollowing)
+        return ProfileDto(user.toDto(), counts.posts, counts.followers, counts.following, viewerId == user.id, isFollowing)
     }
 
     suspend fun userIdFor(username: String): Uuid = users.findByUsername(username.trim().lowercase())?.id ?: throw notFound()
@@ -100,5 +109,13 @@ class ProfileService(
     private companion object {
         const val DISPLAY_NAME_MAX = 60
         const val BIO_MAX = 150
+        val COUNTS_TTL = 5.minutes
     }
 }
+
+/** Cached per user under [RedisKeys.counts]. */
+@Serializable
+data class ProfileCounts(val posts: Long, val followers: Long, val following: Long)
+
+/** Call after committing a change to anyone's posts or follows. */
+suspend fun Cache.invalidateCounts(vararg userIds: Uuid) = invalidate(*userIds.map { RedisKeys.counts(it) }.toTypedArray())

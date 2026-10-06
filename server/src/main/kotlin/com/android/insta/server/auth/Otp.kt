@@ -4,14 +4,14 @@ import com.android.insta.server.common.ApiException
 import com.android.insta.server.common.ValidationException
 import com.android.insta.server.config.OtpConfig
 import com.android.insta.server.db.OtpChallenges
+import com.android.insta.server.redis.OtpSendDecision
+import com.android.insta.server.redis.OtpSendThrottle
 import com.google.i18n.phonenumbers.NumberParseException
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.greater
 import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -26,6 +26,8 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.toJavaDuration
 import kotlin.uuid.Uuid
 
@@ -77,8 +79,9 @@ class LogSmsSender : SmsSender {
 
 /**
  * One-time codes: 6 random digits, stored only as an HMAC (keyed with a server secret), valid for [OtpConfig.codeTtl],
- * single use, at most [OtpConfig.maxAttempts] guesses. Sends per number are throttled by a cooldown and an hourly cap.
- * Each code is bound to a purpose and an owner, so a sign-in code can't confirm an account deletion.
+ * single use, at most [OtpConfig.maxAttempts] guesses. Sends per number are throttled by a cooldown and an hourly cap
+ * ([OtpSendThrottle], in Redis). Each code is bound to a purpose and an owner, so a sign-in code can't confirm an
+ * account deletion.
  */
 class OtpService(
     private val db: Database,
@@ -86,6 +89,7 @@ class OtpService(
     private val config: OtpConfig,
     secret: String,
     private val clock: Clock,
+    private val throttle: OtpSendThrottle,
 ) {
     private val key = SecretKeySpec(secret.toByteArray(), "HmacSHA256")
     private val random = SecureRandom()
@@ -94,15 +98,21 @@ class OtpService(
         val now = now()
         val code = (0 until 6).joinToString("") { random.nextInt(10).toString() }
         val id = Uuid.random()
+        // Fails closed: without Redis there's nothing stopping code flooding (and SMS cost), so no code is sent.
+        val decision = try {
+            throttle.acquire(phone, config.resendCooldown, config.maxPerHour, 1.hours)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LoggerFactory.getLogger(OtpService::class.java).warn("OTP send refused, Redis unavailable: {}", e.message)
+            throw ApiException(HttpStatusCode.ServiceUnavailable, "OTP_UNAVAILABLE", "Can't send codes right now. Try again in a minute.")
+        }
+        when (decision) {
+            is OtpSendDecision.Cooldown -> decision.retryAfter.ceilSeconds().let { throw rateLimited("Wait $it s before requesting another code", it) }
+            is OtpSendDecision.HourlyCap -> throw rateLimited("Too many codes for this number. Try again later.", decision.retryAfter.ceilSeconds())
+            OtpSendDecision.Allowed -> Unit
+        }
         suspendTransaction(db) {
-            val recent = OtpChallenges.selectAll()
-                .where { (OtpChallenges.phone eq phone) and (OtpChallenges.createdAt greater now.minusHours(1)) }
-                .orderBy(OtpChallenges.createdAt to SortOrder.DESC)
-                .map { it[OtpChallenges.createdAt] }
-            val waitSeconds = recent.firstOrNull()?.let { config.resendCooldown.inWholeSeconds - java.time.Duration.between(it, now).seconds } ?: 0
-            if (waitSeconds > 0) throw rateLimited("Wait $waitSeconds s before requesting another code", waitSeconds)
-            if (recent.size >= config.maxPerHour) throw rateLimited("Too many codes for this number. Try again later.", 3600)
-
             OtpChallenges.insert {
                 it[OtpChallenges.id] = id
                 it[OtpChallenges.phone] = phone
@@ -176,6 +186,8 @@ class OtpService(
     }
 
     private fun now() = OffsetDateTime.now(clock.withZone(ZoneOffset.UTC))
+
+    private fun Duration.ceilSeconds(): Long = (inWholeMilliseconds + 999) / 1000
 
     private fun invalidCode() = ApiException(HttpStatusCode.BadRequest, "OTP_INVALID", "That code isn't right")
     private fun tooManyAttempts() = ApiException(HttpStatusCode.BadRequest, "OTP_TOO_MANY_ATTEMPTS", "Too many wrong codes. Request a new one.")

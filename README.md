@@ -43,6 +43,8 @@ flowchart LR
         Services --> PG[("PostgreSQL<br/>Exposed · Flyway")]
         Services --> Disk[("Media volume")]
         Services --> Push["PushSender<br/>(FCM or no-op)"]
+        Services --> Redis[("Redis<br/>job streams · rate limits · cache")]
+        Redis --> Workers["Job workers"]
     end
     Ktor <--> Routes
     Push -. "only when offline" .-> FCM
@@ -52,9 +54,19 @@ flowchart LR
 Coil 3, Paging 3 (RemoteMediator), Room 3, DataStore (tokens encrypted with the Android Keystore), WorkManager,
 Navigation 3 (entryProvider DSL, one back stack per tab), Credential Manager and Firebase Messaging.
 
-**Server**: Ktor 3 (Netty), Exposed + Flyway + HikariCP on PostgreSQL 17, Koin, JWT auth, rate limiting, OpenAPI +
-Swagger UI, Thumbnailator/TwelveMonkeys for images and the Firebase Admin SDK. Tests use `testApplication` and
-Testcontainers.
+**Server**: Ktor 3 (Netty), Exposed + Flyway + HikariCP on PostgreSQL 17, Koin, JWT auth, Redis 8 (Lettuce
+coroutines), OpenAPI + Swagger UI, Thumbnailator/TwelveMonkeys for images and the Firebase Admin SDK. Tests use
+`testApplication` and Testcontainers (Postgres + Redis).
+
+### How background jobs and Redis fit in
+- **Jobs are a transactional outbox.** A service inserts a `jobs` row in the same transaction as its data; after the
+  commit the id goes onto a Redis stream (`insta:jobs:{type}`), where workers in a consumer group claim the row
+  (`queued → running`), run it, and mark it done, retry it with exponential backoff, or dead-letter it.
+- **Postgres decides, Redis delivers.** A reconciler re-publishes due rows (delayed jobs, retries, anything enqueued
+  while Redis was down) and requeues jobs whose worker died, so a Redis restart loses nothing.
+- **Rate limits** live in Redis so they hold across instances: per-IP fixed windows on the auth endpoints (fail open)
+  and a sliding log per phone number for one-time codes (fail closed: no Redis, no SMS).
+- **Cache**: profile counters are read through Redis and invalidated by the writes that change them.
 
 ### How the offline action queue works
 
